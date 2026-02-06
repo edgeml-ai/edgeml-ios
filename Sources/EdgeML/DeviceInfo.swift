@@ -9,6 +9,7 @@
 import Foundation
 import UIKit
 import CoreTelephony
+import Network
 
 /// Collects and manages device information for EdgeML platform.
 ///
@@ -32,6 +33,8 @@ public class DeviceInfo {
     public var deviceId: String {
         return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
     }
+
+    private let reachability = Reachability()
 
     // MARK: - Device Hardware
 
@@ -110,10 +113,6 @@ public class DeviceInfo {
 
     /// Get current network type (wifi, cellular, unknown)
     public var networkType: String {
-        guard let reachability = try? Reachability() else {
-            return "unknown"
-        }
-
         switch reachability.connection {
         case .wifi:
             return "wifi"
@@ -223,8 +222,8 @@ public class DeviceInfo {
 
 // MARK: - Reachability Helper
 
-/// Simple reachability check for network type detection
-fileprivate class Reachability {
+/// Network.framework-based reachability for network type detection.
+fileprivate final class Reachability {
     enum Connection {
         case unavailable
         case wifi
@@ -232,9 +231,33 @@ fileprivate class Reachability {
         case none
     }
 
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "ai.edgeml.sdk.reachability")
+    private var latestPath: NWPath?
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            self?.latestPath = path
+        }
+        monitor.start(queue: queue)
+        latestPath = monitor.currentPath
+    }
+
+    deinit {
+        monitor.cancel()
+    }
+
     var connection: Connection {
-        // This is a simplified implementation
-        // In production, use Network framework or a proper Reachability library
-        return .wifi  // Default assumption
+        let path = latestPath ?? monitor.currentPath
+        guard path.status == .satisfied else {
+            return .unavailable
+        }
+        if path.usesInterfaceType(.wifi) {
+            return .wifi
+        }
+        if path.usesInterfaceType(.cellular) {
+            return .cellular
+        }
+        return .none
     }
 }

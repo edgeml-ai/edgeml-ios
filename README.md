@@ -4,11 +4,11 @@ Official iOS SDK for the EdgeML federated learning platform.
 
 ## Features
 
-- ✅ **Automatic Device Registration** - Collects and sends complete hardware metadata
-- ✅ **Real-Time Monitoring** - Tracks battery level, network type, and system constraints
-- ✅ **Stable Device IDs** - Uses IDFV (Identifier For Vendor)
-- ✅ **CoreML Optimization** - Leverages Neural Engine for on-device training
-- ✅ **Privacy-First** - All training happens on-device
+- Automatic Device Registration - Collects and sends complete hardware metadata
+- Real-Time Monitoring - Tracks battery level, network type, and system constraints
+- Stable Device IDs - Uses IDFV (Identifier For Vendor)
+- CoreML Optimization - Leverages Neural Engine for on-device training
+- Privacy-First - All training happens on-device
 
 ## Installation
 
@@ -16,14 +16,14 @@ Official iOS SDK for the EdgeML federated learning platform.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/edgeml-ai/edgeml-ios.git", from: "1.0.0")
+    .package(url: "https://github.com/edgeml-ai/edgeml-ios.git", from: "1.1.0")
 ]
 ```
 
 ### CocoaPods
 
 ```ruby
-pod 'EdgeML', '~> 1.0'
+pod 'EdgeML', '~> 1.1'
 ```
 
 ## Quick Start
@@ -72,24 +72,25 @@ import EdgeML
 
 class EdgeMLClient {
     private let baseURL: String
-    private let apiKey: String
+    private let deviceToken: String
     private let device = DeviceInfo()
     private var deviceServerId: String?
 
-    init(apiKey: String, baseURL: String = "https://api.edgeml.io") {
-        self.apiKey = apiKey
+    // deviceToken should be short-lived and issued by your backend.
+    init(deviceToken: String, baseURL: String = "https://api.edgeml.io") {
+        self.deviceToken = deviceToken
         self.baseURL = baseURL
     }
 
     func register(orgId: String) async throws -> String {
         var data = device.toRegistrationDict()
         data["org_id"] = orgId
-        data["sdk_version"] = "1.0.0"
+        data["sdk_version"] = "1.1.0"
 
         let url = URL(string: "\(baseURL)/api/v1/devices/register")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: data)
 
@@ -112,7 +113,7 @@ class EdgeMLClient {
         let url = URL(string: "\(baseURL)/api/v1/devices/\(deviceId)/heartbeat")!
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["metadata": metadata])
 
@@ -121,7 +122,7 @@ class EdgeMLClient {
 }
 
 // Usage
-let client = EdgeMLClient(apiKey: "edg_your_key_here")
+let client = EdgeMLClient(deviceToken: "short_lived_token_from_backend")
 Task {
     let deviceId = try await client.register(orgId: "your_org_id")
     print("Registered with ID: \(deviceId)")
@@ -129,6 +130,32 @@ Task {
     // Send periodic heartbeats
     try await client.sendHeartbeat()
 }
+```
+
+## Security Guidance
+
+- Do not embed long-lived org API keys in iOS apps.
+- Mint short-lived device tokens from your backend after user/session auth.
+- Bind each token to a single organization and minimum required scopes.
+
+## Runtime Auth Manager
+
+```swift
+import EdgeML
+
+let auth = DeviceAuthManager(
+    baseURL: URL(string: "https://api.edgeml.io")!,
+    orgId: "your_org_id",
+    deviceIdentifier: "device-123"
+)
+
+// Bootstrap with backend-issued bootstrap token
+let tokenState = try await auth.bootstrap(
+    bootstrapBearerToken: "token_from_your_backend"
+)
+
+// Get valid short-lived access token (auto-refreshes when expiring)
+let accessToken = try await auth.getAccessToken()
 ```
 
 ## Background Heartbeats
@@ -170,7 +197,7 @@ The SDK collects hardware metadata and runtime constraints for:
 - Device fleet monitoring
 - Model compatibility
 
-All training happens **on-device**. No personal data or training data is sent to servers.
+All training happens on-device. No personal data or training data is sent to servers.
 
 ## License
 
