@@ -222,6 +222,26 @@ let apiKey = try storage.getAPIKey()
 storage.clearAll()
 ```
 
+## Runtime Device Auth
+
+For production clients, mint short-lived device tokens from your backend and refresh them at runtime.
+
+```swift
+import EdgeML
+
+let auth = DeviceAuthManager(
+    baseURL: URL(string: "https://api.edgeml.io")!,
+    orgId: "org_123",
+    deviceIdentifier: "ios-device-abc"
+)
+
+// Bootstrap once with a backend-issued bootstrap bearer token
+let tokenState = try await auth.bootstrap(bootstrapBearerToken: "token_from_backend")
+
+// Get valid short-lived access token for API requests
+let accessToken = try await auth.getAccessToken()
+```
+
 ## Network Monitoring
 
 Monitor network status for optimal operation:
