@@ -41,7 +41,7 @@ Or add it through Xcode:
 import EdgeML
 
 let client = EdgeMLClient(
-    apiKey: "your-api-key",
+    deviceAccessToken: "<short-lived-device-token>",
     orgId: "your-org-id",
     serverURL: URL(string: "https://api.edgeml.ai")!,
     configuration: .default
@@ -137,7 +137,7 @@ let config = EdgeMLConfiguration(
 )
 
 let client = EdgeMLClient(
-    apiKey: "your-api-key",
+    deviceAccessToken: "<short-lived-device-token>",
     orgId: "your-org-id",
     configuration: config
 )
@@ -207,16 +207,16 @@ client.enableBackgroundTraining(
 
 ## Secure Storage
 
-API keys and tokens are stored securely in the iOS Keychain:
+Device tokens and credentials are stored securely in the iOS Keychain:
 
 ```swift
 let storage = SecureStorage()
 
-// Store API key
-try storage.storeAPIKey("your-api-key")
+// Store device token
+try storage.storeDeviceToken("<short-lived-device-token>")
 
-// Retrieve API key
-let apiKey = try storage.getAPIKey()
+// Retrieve device token
+let deviceToken = try storage.getDeviceToken()
 
 // Clear all credentials
 storage.clearAll()

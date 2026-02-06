@@ -7,7 +7,6 @@ public actor APIClient {
     // MARK: - Properties
 
     private let serverURL: URL
-    private let apiKey: String
     private let configuration: EdgeMLConfiguration
     private let session: URLSession
     private let jsonDecoder: JSONDecoder
@@ -21,15 +20,12 @@ public actor APIClient {
     /// Creates a new API client.
     /// - Parameters:
     ///   - serverURL: The base URL of the EdgeML server.
-    ///   - apiKey: API key for authentication.
     ///   - configuration: SDK configuration.
     public init(
         serverURL: URL,
-        apiKey: String,
         configuration: EdgeMLConfiguration
     ) {
         self.serverURL = serverURL
-        self.apiKey = apiKey
         self.configuration = configuration
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "APIClient")
 
@@ -51,7 +47,7 @@ public actor APIClient {
 
     // MARK: - Token Management
 
-    /// Sets the device token for authenticated requests.
+    /// Sets the short-lived device access token for authenticated requests.
     public func setDeviceToken(_ token: String) {
         self.deviceToken = token
     }
@@ -72,7 +68,7 @@ public actor APIClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        try configureHeaders(&urlRequest)
         urlRequest.httpBody = try jsonEncoder.encode(request)
 
         return try await performRequest(urlRequest)
@@ -91,7 +87,7 @@ public actor APIClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
         urlRequest.httpBody = try jsonEncoder.encode(request)
 
         return try await performRequest(urlRequest)
@@ -107,7 +103,7 @@ public actor APIClient {
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
 
         let response: DeviceGroupsResponse = try await performRequest(urlRequest)
         return response.groups
@@ -121,7 +117,7 @@ public actor APIClient {
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
 
         return try await performRequest(urlRequest)
     }
@@ -141,7 +137,7 @@ public actor APIClient {
 
         var urlRequest = URLRequest(url: components.url!)
         urlRequest.httpMethod = "GET"
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
 
         return try await performRequest(urlRequest)
     }
@@ -161,7 +157,7 @@ public actor APIClient {
 
         var urlRequest = URLRequest(url: serverURL.appendingPathComponent(path))
         urlRequest.httpMethod = "GET"
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
 
         let response: ModelVersionResponse = try await performRequest(urlRequest)
         return ModelMetadata(
@@ -192,7 +188,7 @@ public actor APIClient {
 
         var urlRequest = URLRequest(url: components.url!)
         urlRequest.httpMethod = "GET"
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
 
         return try await performRequest(urlRequest)
     }
@@ -210,7 +206,7 @@ public actor APIClient {
 
         var urlRequest = URLRequest(url: components.url!)
         urlRequest.httpMethod = "GET"
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
 
         do {
             return try await performRequest(urlRequest)
@@ -230,7 +226,7 @@ public actor APIClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
         urlRequest.httpBody = try jsonEncoder.encode(update)
 
         let _: EmptyResponse = try await performRequest(urlRequest)
@@ -246,7 +242,7 @@ public actor APIClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        configureHeaders(&urlRequest)
+        try configureHeaders(&urlRequest)
         urlRequest.httpBody = try jsonEncoder.encode(event)
 
         let _: EmptyResponse = try await performRequest(urlRequest)
@@ -295,11 +291,11 @@ public actor APIClient {
 
     // MARK: - Private Methods
 
-    private func configureHeaders(_ request: inout URLRequest) {
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        if let token = deviceToken {
-            request.setValue(token, forHTTPHeaderField: "X-Device-Token")
+    private func configureHeaders(_ request: inout URLRequest) throws {
+        guard let bearer = deviceToken, !bearer.isEmpty else {
+            throw EdgeMLError.authenticationFailed(reason: "Missing device access token")
         }
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         request.setValue("edgeml-ios/1.0", forHTTPHeaderField: "User-Agent")
     }
 

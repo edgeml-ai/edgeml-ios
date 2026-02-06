@@ -17,7 +17,8 @@
 /// import EdgeML
 ///
 /// let client = EdgeMLClient(
-///     apiKey: "your-api-key",
+///     deviceAccessToken: "<short-lived-device-token>",
+///     orgId: "org_123",
 ///     serverURL: URL(string: "https://api.edgeml.ai")!
 /// )
 ///
@@ -41,7 +42,7 @@
 /// - **Model Management**: Download, cache, and version-check CoreML models
 /// - **Federated Training**: On-device training with weight extraction
 /// - **Background Sync**: Automatic training during idle periods
-/// - **Secure Storage**: API key and credential management via Keychain
+/// - **Secure Storage**: Device token and credential management via Keychain
 /// - **Network Resilience**: Automatic retries and offline support
 
 @_exported import Foundation

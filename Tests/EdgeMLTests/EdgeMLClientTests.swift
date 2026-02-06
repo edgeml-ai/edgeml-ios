@@ -7,7 +7,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testClientInitialization() {
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!
         )
 
@@ -24,7 +25,8 @@ final class EdgeMLClientTests: XCTestCase {
         )
 
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!,
             configuration: config
         )
@@ -34,7 +36,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testSharedInstance() {
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!
         )
 
@@ -47,7 +50,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testRegistrationRequiredForModelDownload() async {
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!
         )
 
@@ -71,7 +75,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testGetCachedModelReturnsNil() {
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!
         )
 
@@ -81,7 +86,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testGetCachedModelWithVersionReturnsNil() {
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!
         )
 
@@ -93,7 +99,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testBackgroundTrainingConfiguration() {
         let client = EdgeMLClient(
-            apiKey: "test-api-key",
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
             serverURL: URL(string: "https://api.example.com")!
         )
 

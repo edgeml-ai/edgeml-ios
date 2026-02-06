@@ -18,7 +18,8 @@ import UIKit
 ///
 /// ```swift
 /// let client = EdgeMLClient(
-///     apiKey: "your-api-key",
+///     deviceAccessToken: "<short-lived-device-token>",
+///     orgId: "org_123",
 ///     serverURL: URL(string: "https://api.edgeml.ai")!
 /// )
 ///
@@ -78,13 +79,13 @@ public final class EdgeMLClient: @unchecked Sendable {
 
     /// Creates a new EdgeML client.
     /// - Parameters:
-    ///   - apiKey: API key for authentication.
+    ///   - deviceAccessToken: Short-lived device access token from backend bootstrap flow.
     ///   - orgId: Organization identifier.
     ///   - serverURL: Base URL of the EdgeML server.
     ///   - configuration: SDK configuration options.
     ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
     public init(
-        apiKey: String,
+        deviceAccessToken: String,
         orgId: String,
         serverURL: URL = URL(string: "https://api.edgeml.ai")!,
         configuration: EdgeMLConfiguration = .default,
@@ -98,7 +99,6 @@ public final class EdgeMLClient: @unchecked Sendable {
         self.secureStorage = SecureStorage()
         self.apiClient = APIClient(
             serverURL: serverURL,
-            apiKey: apiKey,
             configuration: configuration
         )
 
@@ -107,8 +107,11 @@ public final class EdgeMLClient: @unchecked Sendable {
             configuration: configuration
         )
 
-        // Store API key securely
-        try? secureStorage.storeAPIKey(apiKey)
+        // Store device token securely
+        try? secureStorage.storeDeviceToken(deviceAccessToken)
+        Task {
+            await apiClient.setDeviceToken(deviceAccessToken)
+        }
 
         // Try to restore device token from keychain
         if let storedToken = try? secureStorage.getDeviceToken() {
