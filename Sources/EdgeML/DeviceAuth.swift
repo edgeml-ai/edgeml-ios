@@ -97,7 +97,15 @@ public actor DeviceAuthManager {
     public func getAccessToken(refreshIfExpiringWithin seconds: TimeInterval = 30) async throws -> String {
         let current = try load()
         if Date().addingTimeInterval(seconds) >= current.expiresAt {
-            return try await refresh().accessToken
+            do {
+                return try await refresh().accessToken
+            } catch {
+                // Offline-safe fallback: continue with current token until hard expiry.
+                if Date() < current.expiresAt {
+                    return current.accessToken
+                }
+                throw error
+            }
         }
         return current.accessToken
     }
