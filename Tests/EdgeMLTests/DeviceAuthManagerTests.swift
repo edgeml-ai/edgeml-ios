@@ -3,6 +3,11 @@ import XCTest
 @testable import EdgeML
 
 final class DeviceAuthManagerTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        MockURLProtocol.responses = []
+        MockURLProtocol.requests = []
+    }
 
     override class func setUp() {
         super.setUp()
@@ -89,6 +94,50 @@ final class DeviceAuthManagerTests: XCTestCase {
         }
     }
 
+    func testGetAccessTokenReturnsCurrentTokenWhenNotNearExpiry() async throws {
+        let manager = makeManager()
+        let formatter = ISO8601DateFormatter.withFractional
+        let exp = formatter.string(from: Date().addingTimeInterval(3600))
+
+        MockURLProtocol.responses = [
+            .success(
+                statusCode: 201,
+                json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
+            ),
+        ]
+
+        _ = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
+        let token = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
+        XCTAssertEqual(token, "acc_bootstrap")
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+    }
+
+    func testRevokeFailurePreservesStoredState() async throws {
+        let manager = makeManager()
+        let formatter = ISO8601DateFormatter.withFractional
+        let exp = formatter.string(from: Date().addingTimeInterval(600))
+
+        MockURLProtocol.responses = [
+            .success(
+                statusCode: 201,
+                json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
+            ),
+            .failure(URLError(.cannotConnectToHost)),
+        ]
+
+        _ = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
+
+        do {
+            try await manager.revoke()
+            XCTFail("Expected revoke failure")
+        } catch {
+            XCTAssertTrue(true)
+        }
+
+        let token = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
+        XCTAssertEqual(token, "acc_bootstrap")
+    }
+
     private func makeManager() -> DeviceAuthManager {
         let unique = UUID().uuidString
         return DeviceAuthManager(
@@ -120,6 +169,7 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     static var responses: [MockResponse] = []
+    static var requests: [URLRequest] = []
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "api.example.com"
@@ -130,6 +180,7 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
+        Self.requests.append(request)
         guard !Self.responses.isEmpty else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
@@ -177,4 +228,3 @@ private extension ISO8601DateFormatter {
         return formatter
     }()
 }
-
