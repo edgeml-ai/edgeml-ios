@@ -1,346 +1,84 @@
 # EdgeML iOS SDK
 
-A Swift SDK for federated learning on iOS devices with CoreML integration.
+Swift SDK for privacy-safe on-device personalization and federated learning.
 
-## Overview
+## Enterprise Runtime Auth (required)
 
-The EdgeML iOS SDK enables iOS applications to participate in federated learning by:
-- Registering devices with the EdgeML server
-- Downloading and caching CoreML models
-- Running on-device inference
-- Participating in federated training rounds
-- Syncing model updates in the background
+Do not embed org API keys in shipped apps. Use backend-issued bootstrap tokens and short-lived device credentials.
 
-## Requirements
+**Server endpoints**
+- `POST /api/v1/device-auth/bootstrap`
+- `POST /api/v1/device-auth/refresh`
+- `POST /api/v1/device-auth/revoke`
 
-- iOS 15.0+
-- Swift 5.9+
-- Xcode 15.0+
+**Default lifetimes**
+- Access token: 15 minutes (configurable, max 60 minutes)
+- Refresh token: 30 days (rotated on refresh)
 
 ## Installation
 
-### Swift Package Manager
-
-Add EdgeML to your project using Swift Package Manager:
-
 ```swift
 dependencies: [
-    .package(path: "../edgeml-ios")
+  .package(url: "https://github.com/edgeml-ai/edgeml-ios", from: "0.1.0")
 ]
 ```
 
-Or add it through Xcode:
-1. File -> Add Package Dependencies
-2. Enter the package URL
+## Quick Start (Enterprise)
 
-## Quick Start
-
-### 1. Initialize the Client
-
-```swift
-import EdgeML
-
-let client = EdgeMLClient(
-    deviceAccessToken: "<short-lived-device-token>",
-    orgId: "your-org-id",
-    serverURL: URL(string: "https://api.edgeml.ai")!,
-    configuration: .default
-)
-```
-
-### 2. Register the Device
-
-```swift
-do {
-    let registration = try await client.register(
-        metadata: ["app_version": "1.0.0"]
-    )
-    print("Device registered: \(registration.deviceId)")
-} catch {
-    print("Registration failed: \(error)")
-}
-```
-
-### 3. Download a Model
-
-```swift
-do {
-    let model = try await client.downloadModel(modelId: "fraud_detection")
-    print("Model downloaded: \(model.id) v\(model.version)")
-} catch {
-    print("Download failed: \(error)")
-}
-```
-
-### 4. Run Inference
-
-```swift
-// Create input features
-let input = try MLDictionaryFeatureProvider(dictionary: [
-    "feature1": 0.5,
-    "feature2": 1.0
-])
-
-// Run prediction
-let prediction = try model.predict(input: input)
-
-// Access results
-if let output = prediction.featureValue(for: "prediction") {
-    print("Prediction: \(output.doubleValue)")
-}
-```
-
-### 5. Participate in Training
-
-```swift
-let result = try await client.participateInRound(
-    modelId: "fraud_detection",
-    dataProvider: { yourTrainingDataBatch },
-    config: TrainingConfig(epochs: 1, batchSize: 32)
-)
-print("Training completed: \(result.trainingResult.sampleCount) samples")
-```
-
-### 6. Enable Background Training
-
-```swift
-// In AppDelegate or app initialization
-BackgroundSync.registerBackgroundTasks()
-
-// Enable background training
-client.enableBackgroundTraining(
-    modelId: "fraud_detection",
-    dataProvider: { yourTrainingDataBatch },
-    constraints: .default
-)
-```
-
-## Configuration
-
-### EdgeMLConfiguration
-
-Customize SDK behavior with configuration options:
-
-```swift
-let config = EdgeMLConfiguration(
-    maxRetryAttempts: 5,
-    requestTimeout: 60,
-    downloadTimeout: 300,
-    enableLogging: true,
-    logLevel: .debug,
-    maxCacheSize: 500 * 1024 * 1024, // 500 MB
-    autoCheckUpdates: true,
-    updateCheckInterval: 3600, // 1 hour
-    requireWiFiForDownload: true,
-    requireChargingForTraining: true,
-    minimumBatteryLevel: 0.2
-)
-
-let client = EdgeMLClient(
-    deviceAccessToken: "<short-lived-device-token>",
-    orgId: "your-org-id",
-    configuration: config
-)
-```
-
-### Preset Configurations
-
-```swift
-// Development (verbose logging, relaxed constraints)
-let devConfig = EdgeMLConfiguration.development
-
-// Production (conservative settings, minimal logging)
-let prodConfig = EdgeMLConfiguration.production
-```
-
-## Background Training
-
-### Registration
-
-Register background tasks in your `AppDelegate` or `@main` struct:
-
-```swift
-@main
-struct YourApp: App {
-    init() {
-        BackgroundSync.registerBackgroundTasks()
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-    }
-}
-```
-
-### Info.plist Configuration
-
-Add the background task identifiers to your Info.plist:
-
-```xml
-<key>BGTaskSchedulerPermittedIdentifiers</key>
-<array>
-    <string>ai.edgeml.training</string>
-    <string>ai.edgeml.sync</string>
-</array>
-```
-
-### Background Constraints
-
-Customize when background training runs:
-
-```swift
-let constraints = BackgroundConstraints(
-    requiresWiFi: true,
-    requiresCharging: true,
-    minimumBatteryLevel: 0.2,
-    maxExecutionTime: 300
-)
-
-client.enableBackgroundTraining(
-    modelId: "fraud_detection",
-    dataProvider: { yourData },
-    constraints: constraints
-)
-```
-
-## Secure Storage
-
-Device tokens and credentials are stored securely in the iOS Keychain:
-
-```swift
-let storage = SecureStorage()
-
-// Store device token
-try storage.storeDeviceToken("<short-lived-device-token>")
-
-// Retrieve device token
-let deviceToken = try storage.getDeviceToken()
-
-// Clear all credentials
-storage.clearAll()
-```
-
-## Runtime Device Auth
-
-For production clients, mint short-lived device tokens from your backend and refresh them at runtime.
+### 1) Bootstrap short-lived device auth
 
 ```swift
 import EdgeML
 
 let auth = DeviceAuthManager(
-    baseURL: URL(string: "https://api.edgeml.io")!,
-    orgId: "org_123",
-    deviceIdentifier: "ios-device-abc"
+  baseURL: URL(string: "https://api.edgeml.io")!,
+  orgId: "org_123",
+  deviceIdentifier: "ios-device-abc"
 )
 
-// Bootstrap once with a backend-issued bootstrap bearer token
-let tokenState = try await auth.bootstrap(bootstrapBearerToken: "token_from_backend")
-
-// Get valid short-lived access token for API requests
+let tokenState = try await auth.bootstrap(
+  bootstrapBearerToken: backendBootstrapToken
+)
 let accessToken = try await auth.getAccessToken()
 ```
 
-## Network Monitoring
-
-Monitor network status for optimal operation:
+### 2) Initialize EdgeML client
 
 ```swift
-let monitor = NetworkMonitor.shared
-
-if monitor.isConnected {
-    // Proceed with network operations
-}
-
-if monitor.isOnWiFi {
-    // Large downloads are OK
-}
-
-// Add status change handler
-let token = monitor.addHandler { isConnected in
-    print("Network status changed: \(isConnected)")
-}
-
-// Remove handler when done
-monitor.removeHandler(token)
+let client = EdgeMLClient(
+  deviceAccessToken: accessToken,
+  orgId: "org_123",
+  serverURL: URL(string: "https://api.edgeml.io")!,
+  configuration: .production
+)
 ```
 
-## Error Handling
-
-The SDK uses `EdgeMLError` for all error cases:
+### 3) Register and run
 
 ```swift
-do {
-    let model = try await client.downloadModel(modelId: "test")
-} catch let error as EdgeMLError {
-    switch error {
-    case .networkUnavailable:
-        print("Check your network connection")
-    case .deviceNotRegistered:
-        print("Please register the device first")
-    case .modelNotFound(let modelId):
-        print("Model not found: \(modelId)")
-    case .checksumMismatch:
-        print("Download corrupted, please retry")
-    default:
-        print(error.localizedDescription)
-    }
-}
+let registration = try await client.register(metadata: ["app_version": "1.0.0"])
+let model = try await client.downloadModel(modelId: "ad-relevance")
 ```
 
-## Model Caching
+## Token lifecycle
 
-Models are automatically cached after download:
+- Call `getAccessToken()` before network calls.
+- SDK refreshes near expiry via refresh token.
+- On logout/device compromise, revoke session and clear local secure state.
 
-```swift
-// Get cached model (no network required)
-if let cachedModel = client.getCachedModel(modelId: "fraud_detection") {
-    // Use cached model
-}
+## Secure storage
 
-// Check for updates
-if let update = try await client.checkForUpdates(modelId: "fraud_detection") {
-    if update.isRequired {
-        // Download new version
-        let newModel = try await client.downloadModel(
-            modelId: "fraud_detection",
-            version: update.newVersion
-        )
-    }
-}
+Token state is stored in iOS Keychain.
 
-// Clear cache if needed
-try client.clearCache()
-```
+## Core capabilities
 
-## Architecture
+- device registration and heartbeat
+- model download/cache
+- on-device inference
+- local training + update upload
+- background sync scheduling
 
-```
-edgeml-ios/
-├── Sources/EdgeML/
-│   ├── Client/
-│   │   ├── EdgeMLClient.swift      # Main entry point
-│   │   ├── Configuration.swift     # SDK configuration
-│   │   ├── APIClient.swift         # Network layer
-│   │   ├── APIModels.swift         # Request/response models
-│   │   └── EdgeMLError.swift       # Error types
-│   ├── Models/
-│   │   ├── EdgeMLModel.swift       # CoreML wrapper
-│   │   ├── ModelManager.swift      # Download & version control
-│   │   └── ModelCache.swift        # Local storage
-│   ├── Training/
-│   │   └── FederatedTrainer.swift  # On-device training
-│   ├── Sync/
-│   │   └── BackgroundSync.swift    # Background tasks
-│   └── Utils/
-│       ├── SecureStorage.swift     # Keychain access
-│       ├── NetworkMonitor.swift    # Connectivity
-│       └── Logger.swift            # Logging
-├── Tests/EdgeMLTests/
-└── Examples/EdgeMLDemo/
-```
+## Docs
 
-## License
-
-Copyright 2024 EdgeML Team. All rights reserved.
+- https://docs.edgeml.io/sdks/ios
+- https://docs.edgeml.io/reference/api-endpoints
