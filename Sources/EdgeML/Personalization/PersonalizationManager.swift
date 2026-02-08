@@ -81,15 +81,24 @@ public actor PersonalizationManager {
         if let personalizedURL = getPersonalizedModelURL(for: model.id) {
             // Load personalized model
             if FileManager.default.fileExists(atPath: personalizedURL.path) {
-                self.personalizedModel = EdgeMLModel(
-                    id: model.id,
-                    version: "\(model.version)-personalized",
-                    compiledModelURL: personalizedURL,
-                    supportsTraining: model.supportsTraining
-                )
+                do {
+                    let mlModel = try MLModel(contentsOf: personalizedURL)
+                    let metadata = model.metadata // Reuse base model metadata
+                    self.personalizedModel = EdgeMLModel(
+                        id: model.id,
+                        version: "\(model.version)-personalized",
+                        mlModel: mlModel,
+                        metadata: metadata,
+                        compiledModelURL: personalizedURL
+                    )
 
-                if configuration.enableLogging {
-                    logger.info("Loaded personalized model for \(model.id)")
+                    if configuration.enableLogging {
+                        logger.info("Loaded personalized model for \(model.id)")
+                    }
+                } catch {
+                    if configuration.enableLogging {
+                        logger.error("Failed to load personalized model: \(error.localizedDescription)")
+                    }
                 }
             }
         }
@@ -103,7 +112,7 @@ public actor PersonalizationManager {
     /// Resets personalization by deleting the personalized model.
     public func resetPersonalization() throws {
         guard let model = baseModel else {
-            throw EdgeMLError.modelNotFound
+            throw EdgeMLError.modelNotFound(reason: "No base model loaded")
         }
 
         if let personalizedURL = getPersonalizedModelURL(for: model.id) {
@@ -195,7 +204,7 @@ public actor PersonalizationManager {
         defer { isTraining = false }
 
         if configuration.enableLogging {
-            logger.info("Starting incremental training with \(trainingBuffer.count) samples")
+            logger.info("Starting incremental training with \(self.trainingBuffer.count) samples")
         }
 
         let startTime = Date()
@@ -242,7 +251,7 @@ public actor PersonalizationManager {
         if trainingMode.uploadsToServer && trainingHistory.count >= uploadThreshold {
             // TODO: Trigger upload of aggregated updates
             if configuration.enableLogging {
-                logger.info("Upload threshold reached (\(trainingHistory.count) sessions) - mode: \(trainingMode)")
+                logger.info("Upload threshold reached (\(self.trainingHistory.count) sessions) - mode: \(self.trainingMode.rawValue)")
             }
         }
     }
@@ -329,7 +338,7 @@ public actor PersonalizationManager {
 
     private func savePersonalizedModel() async throws {
         guard let model = baseModel else {
-            throw EdgeMLError.modelNotFound
+            throw EdgeMLError.modelNotFound(reason: "No base model loaded")
         }
 
         guard let personalizedURL = getPersonalizedModelURL(for: model.id) else {
@@ -340,11 +349,14 @@ public actor PersonalizationManager {
         // We need to save it to the personalized model URL
         // This is a placeholder - actual implementation depends on CoreML's APIs
 
+        let mlModel = try MLModel(contentsOf: model.compiledModelURL)
+        let metadata = model.metadata
         personalizedModel = EdgeMLModel(
             id: model.id,
             version: "\(model.version)-personalized",
-            compiledModelURL: personalizedURL,
-            supportsTraining: model.supportsTraining
+            mlModel: mlModel,
+            metadata: metadata,
+            compiledModelURL: personalizedURL
         )
 
         if configuration.enableLogging {

@@ -189,9 +189,7 @@ public actor FederatedTrainer {
                             continuation.resume(throwing: EdgeMLError.trainingFailed(
                                 reason: context.task.error?.localizedDescription ?? "Unknown error"
                             ))
-                        case .canceled:
-                            continuation.resume(throwing: EdgeMLError.cancelled)
-                        default:
+                        @unknown default:
                             continuation.resume(throwing: EdgeMLError.trainingFailed(reason: "Unexpected state"))
                         }
                     }
