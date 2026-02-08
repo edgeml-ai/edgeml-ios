@@ -3,6 +3,11 @@ import XCTest
 @testable import EdgeML
 
 final class DeviceAuthManagerTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        MockURLProtocol.responses = []
+        MockURLProtocol.requests = []
+    }
 
     override class func setUp() {
         super.setUp()
@@ -15,7 +20,7 @@ final class DeviceAuthManagerTests: XCTestCase {
     }
 
     func testBootstrapRefreshRevokeLifecycle() async throws {
-        let manager = makeManager()
+        let manager = makeManager().manager
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
@@ -48,8 +53,71 @@ final class DeviceAuthManagerTests: XCTestCase {
         }
     }
 
+    func testBootstrapSendsExpectedPayloadAndBearerToken() async throws {
+        let fixture = makeManager()
+        let manager = fixture.manager
+        let formatter = ISO8601DateFormatter.withFractional
+        let exp = formatter.string(from: Date().addingTimeInterval(900))
+
+        MockURLProtocol.responses = [
+            .success(
+                statusCode: 201,
+                json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
+            ),
+        ]
+
+        _ = try await manager.bootstrap(
+            bootstrapBearerToken: "bootstrap-token",
+            scopes: ["devices:write", "heartbeat:write"],
+            accessTTLSeconds: 600,
+            deviceId: "device-db-id"
+        )
+
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+        let request = try XCTUnwrap(MockURLProtocol.requests.first)
+        XCTAssertEqual(request.url?.path, "/api/v1/device-auth/bootstrap")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer bootstrap-token")
+        let payload = try jsonBody(request)
+        XCTAssertEqual(payload["org_id"] as? String, fixture.orgId)
+        XCTAssertEqual(payload["device_identifier"] as? String, fixture.deviceIdentifier)
+        XCTAssertEqual(payload["access_ttl_seconds"] as? Int, 600)
+        XCTAssertEqual(payload["device_id"] as? String, "device-db-id")
+        XCTAssertEqual(payload["scopes"] as? [String], ["devices:write", "heartbeat:write"])
+    }
+
+    func testRefreshUsesLatestRefreshTokenAfterRotation() async throws {
+        let manager = makeManager().manager
+        let formatter = ISO8601DateFormatter.withFractional
+        let exp = formatter.string(from: Date().addingTimeInterval(900))
+
+        MockURLProtocol.responses = [
+            .success(
+                statusCode: 201,
+                json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
+            ),
+            .success(
+                statusCode: 200,
+                json: tokenPayload(access: "acc_refresh_1", refresh: "ref_refresh_1", expiresAt: exp)
+            ),
+            .success(
+                statusCode: 200,
+                json: tokenPayload(access: "acc_refresh_2", refresh: "ref_refresh_2", expiresAt: exp)
+            ),
+        ]
+
+        _ = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
+        _ = try await manager.refresh()
+        _ = try await manager.refresh()
+
+        XCTAssertEqual(MockURLProtocol.requests.count, 3)
+        let firstRefreshPayload = try jsonBody(try XCTUnwrap(MockURLProtocol.requests[safe: 1]))
+        let secondRefreshPayload = try jsonBody(try XCTUnwrap(MockURLProtocol.requests[safe: 2]))
+        XCTAssertEqual(firstRefreshPayload["refresh_token"] as? String, "ref_bootstrap")
+        XCTAssertEqual(secondRefreshPayload["refresh_token"] as? String, "ref_refresh_1")
+    }
+
     func testGetAccessTokenFallsBackWhenRefreshFailsAndTokenStillValid() async throws {
-        let manager = makeManager()
+        let manager = makeManager().manager
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(300))
 
@@ -67,7 +135,7 @@ final class DeviceAuthManagerTests: XCTestCase {
     }
 
     func testGetAccessTokenThrowsWhenExpiredAndRefreshFails() async throws {
-        let manager = makeManager()
+        let manager = makeManager().manager
         let formatter = ISO8601DateFormatter.withFractional
         let expired = formatter.string(from: Date().addingTimeInterval(-60))
 
@@ -89,13 +157,63 @@ final class DeviceAuthManagerTests: XCTestCase {
         }
     }
 
-    private func makeManager() -> DeviceAuthManager {
+    func testGetAccessTokenReturnsCurrentTokenWhenNotNearExpiry() async throws {
+        let manager = makeManager().manager
+        let formatter = ISO8601DateFormatter.withFractional
+        let exp = formatter.string(from: Date().addingTimeInterval(3600))
+
+        MockURLProtocol.responses = [
+            .success(
+                statusCode: 201,
+                json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
+            ),
+        ]
+
+        _ = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
+        let token = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
+        XCTAssertEqual(token, "acc_bootstrap")
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+    }
+
+    func testRevokeFailurePreservesStoredState() async throws {
+        let manager = makeManager().manager
+        let formatter = ISO8601DateFormatter.withFractional
+        let exp = formatter.string(from: Date().addingTimeInterval(600))
+
+        MockURLProtocol.responses = [
+            .success(
+                statusCode: 201,
+                json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
+            ),
+            .failure(URLError(.cannotConnectToHost)),
+        ]
+
+        _ = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
+
+        do {
+            try await manager.revoke()
+            XCTFail("Expected revoke failure")
+        } catch {
+            XCTAssertTrue(true)
+        }
+
+        let token = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
+        XCTAssertEqual(token, "acc_bootstrap")
+    }
+
+    private func makeManager() -> (manager: DeviceAuthManager, orgId: String, deviceIdentifier: String) {
         let unique = UUID().uuidString
-        return DeviceAuthManager(
+        let orgId = "org-\(unique)"
+        let deviceIdentifier = "device-\(unique)"
+        return (
+            DeviceAuthManager(
             baseURL: URL(string: "https://api.example.com")!,
-            orgId: "org-\(unique)",
-            deviceIdentifier: "device-\(unique)",
+            orgId: orgId,
+            deviceIdentifier: deviceIdentifier,
             keychainService: "ai.edgeml.tests.\(unique)"
+            ),
+            orgId,
+            deviceIdentifier
         )
     }
 
@@ -110,6 +228,13 @@ final class DeviceAuthManagerTests: XCTestCase {
             "scopes": ["devices:write"],
         ]
     }
+
+    private func jsonBody(_ request: URLRequest) throws -> [String: Any] {
+        let data = try XCTUnwrap(request.httpBody)
+        let payload = try JSONSerialization.jsonObject(with: data)
+        return try XCTUnwrap(payload as? [String: Any])
+    }
+
 }
 
 private final class MockURLProtocol: URLProtocol {
@@ -120,6 +245,7 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     static var responses: [MockResponse] = []
+    static var requests: [URLRequest] = []
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "api.example.com"
@@ -130,6 +256,7 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
+        Self.requests.append(request)
         guard !Self.responses.isEmpty else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
@@ -170,6 +297,12 @@ private final class MockURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
 private extension ISO8601DateFormatter {
     static let withFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -177,4 +310,3 @@ private extension ISO8601DateFormatter {
         return formatter
     }()
 }
-
