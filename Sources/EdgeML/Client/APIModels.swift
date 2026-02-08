@@ -131,9 +131,6 @@ public struct DeviceRegistrationResponse: Codable, Sendable {
     }
 }
 
-/// Alias for backward compatibility.
-public typealias DeviceRegistration = DeviceRegistrationResponse
-
 // MARK: - Device Heartbeat
 
 /// Request body for device heartbeat.
