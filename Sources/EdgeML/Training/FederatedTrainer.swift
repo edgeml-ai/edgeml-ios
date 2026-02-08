@@ -147,9 +147,8 @@ public actor FederatedTrainer {
             )
         }
 
-        // Add update format to metrics
-        var metrics = trainingResult.metrics
-        metrics["update_format"] = updateFormat
+        // Metrics are already in the correct format from training result
+        let metrics = trainingResult.metrics
 
         if configuration.enableLogging {
             logger.info("Weight extraction completed: \(weightsData.count) bytes (\(updateFormat))")
@@ -158,6 +157,7 @@ public actor FederatedTrainer {
         return WeightUpdate(
             modelId: model.id,
             version: model.version,
+            deviceId: nil,
             weightsData: weightsData,
             sampleCount: trainingResult.sampleCount,
             metrics: metrics
@@ -171,10 +171,10 @@ public actor FederatedTrainer {
         trainingData: MLBatchProvider,
         config: TrainingConfig
     ) async throws -> MLUpdateContext {
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { [self] continuation in
             do {
                 // Configure training parameters
-                let parameters = try configureTrainingParameters(config: config)
+                let parameters = try self.configureTrainingParameters(config: config)
 
                 // Create update task
                 let updateTask = try MLUpdateTask(
@@ -189,7 +189,7 @@ public actor FederatedTrainer {
                             continuation.resume(throwing: EdgeMLError.trainingFailed(
                                 reason: context.task.error?.localizedDescription ?? "Unknown error"
                             ))
-                        case .cancelled:
+                        case .canceled:
                             continuation.resume(throwing: EdgeMLError.cancelled)
                         default:
                             continuation.resume(throwing: EdgeMLError.trainingFailed(reason: "Unexpected state"))
