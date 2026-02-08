@@ -28,18 +28,19 @@ jobs:
           fi
 
       - name: Build
-        run: swift build
+        run: |
+          xcodebuild build -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15'
 
       - name: Run tests with coverage
         run: |
-          swift test --enable-code-coverage
+          xcodebuild test -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults
 
       - name: Generate coverage report
         run: |
-          xcrun llvm-cov export -format="lcov" \
-            .build/debug/EdgeMLPackageTests.xctest/Contents/MacOS/EdgeMLPackageTests \
-            -instr-profile .build/debug/codecov/default.profdata \
-            > coverage.lcov
+          xcrun xccov view --report --json TestResults.xcresult > coverage.json
+          # Convert to lcov format for Codecov
+          brew install xcbeautify
+          xcrun xccov view --report TestResults.xcresult
 
       - name: Upload coverage to Codecov
         if: matrix.swift-version == '5.10'
