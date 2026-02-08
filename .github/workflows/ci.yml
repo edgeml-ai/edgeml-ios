@@ -65,14 +65,15 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_15.3.app
 
       - name: Run tests with coverage
-        run: swift test --enable-code-coverage
+        run: |
+          xcodebuild test -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults
 
       - name: Generate coverage report for SonarCloud
         run: |
-          xcrun llvm-cov export -format="lcov" \
-            .build/debug/EdgeMLPackageTests.xctest/Contents/MacOS/EdgeMLPackageTests \
-            -instr-profile .build/debug/codecov/default.profdata \
-            > coverage.lcov
+          xcrun xccov view --report --json TestResults.xcresult > coverage.json
+          # Convert to lcov for SonarCloud
+          brew install xcbeautify
+          xcrun xccov view --report TestResults.xcresult
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
