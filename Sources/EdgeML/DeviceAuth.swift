@@ -28,8 +28,9 @@ public protocol TokenStorage: Sendable {
 }
 
 public struct KeychainTokenStorage: TokenStorage {
-    /// No configuration needed; all context is passed per-call via `service` and `account`.
-    public init() {}
+    public init() {
+        // No configuration needed; all context is passed per-call via `service` and `account`.
+    }
 
     public func save(_ data: Data, service: String, account: String) throws {
         let query: [String: Any] = [
