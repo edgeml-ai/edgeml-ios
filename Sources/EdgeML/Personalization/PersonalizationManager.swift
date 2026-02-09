@@ -29,6 +29,15 @@ public actor PersonalizationManager {
     private var baseModel: EdgeMLModel?
     private var trainingHistory: [TrainingSession] = []
 
+    // Ditto mode: separate global model for federation
+    private var globalModel: EdgeMLModel?
+
+    // FedPer mode: layers that are personalized (head) vs shared (body)
+    private var personalizedLayers: Set<String> = []
+
+    // Ditto regularization strength
+    private var lambdaDitto: Double = 0.1
+
     // State
     private var isTraining = false
     private var lastTrainingDate: Date?
@@ -273,7 +282,9 @@ public actor PersonalizationManager {
             averageLoss: trainingHistory.compactMap { $0.loss }.average(),
             averageAccuracy: trainingHistory.compactMap { $0.accuracy }.average(),
             isPersonalized: personalizedModel != nil,
-            trainingMode: trainingMode
+            trainingMode: trainingMode,
+            hasGlobalModel: globalModel != nil,
+            personalizedLayerCount: personalizedLayers.count
         )
     }
 
@@ -288,6 +299,78 @@ public actor PersonalizationManager {
 
         if configuration.enableLogging {
             logger.info("Training buffer cleared")
+        }
+    }
+
+    // MARK: - Ditto Configuration
+
+    /// Configures Ditto mode with the given lambda regularization strength.
+    /// - Parameter lambda: Regularization coefficient (higher = personal model stays closer to global).
+    public func configureDitto(lambda: Double) {
+        self.lambdaDitto = lambda
+
+        // In Ditto mode, the global model is a copy of the base model
+        if trainingMode == .ditto, let base = baseModel {
+            self.globalModel = base
+        }
+
+        if configuration.enableLogging {
+            logger.info("Ditto configured with lambda=\(lambda)")
+        }
+    }
+
+    /// Gets the global model (used in Ditto mode for federation).
+    /// In non-Ditto modes, this returns the base model.
+    public func getGlobalModel() -> EdgeMLModel? {
+        return globalModel ?? baseModel
+    }
+
+    /// Updates the global model after a federated round (Ditto mode).
+    /// - Parameter model: New global model from server aggregation.
+    public func updateGlobalModel(_ model: EdgeMLModel) {
+        self.globalModel = model
+
+        if configuration.enableLogging {
+            logger.info("Global model updated to version \(model.version)")
+        }
+    }
+
+    // MARK: - FedPer Configuration
+
+    /// Configures FedPer mode by specifying which layers are personalized (head).
+    /// - Parameter layers: Set of layer names that form the personalized "head".
+    public func configurePersonalizedLayers(_ layers: [String]) {
+        self.personalizedLayers = Set(layers)
+
+        if configuration.enableLogging {
+            logger.info("FedPer configured with \(layers.count) personalized layers")
+        }
+    }
+
+    /// Gets the set of personalized layer names (FedPer mode).
+    public func getPersonalizedLayerNames() -> Set<String> {
+        return personalizedLayers
+    }
+
+    // MARK: - Server Personalization
+
+    /// Applies personalized model state received from the server.
+    /// - Parameter response: Personalized model response from GET /api/v1/training/personalized/{device_id}.
+    public func applyServerPersonalization(_ response: PersonalizedModelResponse) {
+        // Store metrics if available
+        if let serverMetrics = response.metrics {
+            let session = TrainingSession(
+                timestamp: response.updatedAt ?? Date(),
+                sampleCount: 0,
+                trainingTime: 0,
+                loss: serverMetrics["loss"],
+                accuracy: serverMetrics["accuracy"]
+            )
+            trainingHistory.append(session)
+        }
+
+        if configuration.enableLogging {
+            logger.info("Applied server personalization state (strategy: \(response.strategy ?? "unknown"))")
         }
     }
 
@@ -407,6 +490,10 @@ public struct PersonalizationStatistics {
     public let averageAccuracy: Double?
     public let isPersonalized: Bool
     public let trainingMode: TrainingMode
+    /// Whether a separate global model is maintained (Ditto mode).
+    public let hasGlobalModel: Bool
+    /// Number of personalized layers (FedPer mode).
+    public let personalizedLayerCount: Int
 }
 
 // MARK: - Array Extension

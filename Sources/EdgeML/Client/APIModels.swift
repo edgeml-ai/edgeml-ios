@@ -546,6 +546,8 @@ public struct WeightUpdate: Codable, Sendable {
     public let sampleCount: Int
     /// Training metrics.
     public let metrics: [String: Double]
+    /// Round identifier (for round-based training).
+    public let roundId: String?
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
@@ -554,6 +556,7 @@ public struct WeightUpdate: Codable, Sendable {
         case weightsData = "weights_data"
         case sampleCount = "sample_count"
         case metrics
+        case roundId = "round_id"
     }
 }
 
@@ -572,6 +575,146 @@ public struct TrackingEvent: Codable, Sendable {
         self.name = name
         self.properties = properties
         self.timestamp = timestamp
+    }
+}
+
+// MARK: - Round Management
+
+/// Request to check for round assignments.
+public struct RoundAssignmentRequest: Codable, Sendable {
+    /// Device ID.
+    public let deviceId: String
+    /// Model ID to check.
+    public let modelId: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case modelId = "model_id"
+    }
+}
+
+/// Response from round assignment check.
+public struct RoundAssignment: Codable, Sendable {
+    /// Round identifier.
+    public let roundId: String
+    /// Model ID for this round.
+    public let modelId: String
+    /// Model version to train against.
+    public let modelVersion: String
+    /// Training strategy (e.g., "fedavg", "fedprox", "ditto").
+    public let strategy: String?
+    /// Strategy-specific parameters.
+    public let strategyParams: RoundStrategyParams?
+    /// Round status.
+    public let status: String
+    /// Filter/pipeline configuration from server.
+    public let filterConfig: RoundFilterConfig?
+
+    enum CodingKeys: String, CodingKey {
+        case roundId = "round_id"
+        case modelId = "model_id"
+        case modelVersion = "model_version"
+        case strategy
+        case strategyParams = "strategy_params"
+        case status
+        case filterConfig = "filter_config"
+    }
+}
+
+/// Strategy-specific parameters sent by the server in a round config.
+public struct RoundStrategyParams: Codable, Sendable {
+    /// Proximal term weight for FedProx.
+    public let proximalMu: Double?
+    /// Ditto regularization coefficient.
+    public let lambdaDitto: Double?
+    /// Layers considered "head" (personalized) for FedPer.
+    public let personalizedLayers: [String]?
+    /// Local epochs override from server.
+    public let localEpochs: Int?
+    /// Learning rate override from server.
+    public let learningRate: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case proximalMu = "proximal_mu"
+        case lambdaDitto = "lambda_ditto"
+        case personalizedLayers = "personalized_layers"
+        case localEpochs = "local_epochs"
+        case learningRate = "learning_rate"
+    }
+}
+
+/// Filter pipeline configuration from server round config.
+public struct RoundFilterConfig: Codable, Sendable {
+    /// Gradient clipping configuration.
+    public let gradientClip: GradientClipConfig?
+
+    enum CodingKeys: String, CodingKey {
+        case gradientClip = "gradient_clip"
+    }
+}
+
+/// Gradient clipping parameters.
+public struct GradientClipConfig: Codable, Sendable {
+    /// Maximum L2 norm for gradient clipping.
+    public let maxNorm: Double
+
+    enum CodingKeys: String, CodingKey {
+        case maxNorm = "max_norm"
+    }
+}
+
+/// Response when no round is assigned.
+public struct RoundAssignmentResponse: Codable, Sendable {
+    /// The assignment if one is available.
+    public let assignment: RoundAssignment?
+}
+
+// MARK: - Personalization
+
+/// Response containing personalized model state from the server.
+public struct PersonalizedModelResponse: Codable, Sendable {
+    /// Device ID.
+    public let deviceId: String
+    /// Model ID.
+    public let modelId: String
+    /// Personalized weights data (base64 encoded from server, decoded to Data).
+    public let weightsData: Data?
+    /// Strategy used (e.g., "ditto", "fedper").
+    public let strategy: String?
+    /// Metrics associated with the personalized model.
+    public let metrics: [String: Double]?
+    /// When the personalized state was last updated.
+    public let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case modelId = "model_id"
+        case weightsData = "weights_data"
+        case strategy
+        case metrics
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Request to upload personalized model update.
+public struct PersonalizedUpdateRequest: Codable, Sendable {
+    /// Device ID.
+    public let deviceId: String
+    /// Model ID.
+    public let modelId: String
+    /// Personalized weights data.
+    public let weightsData: Data
+    /// Training metrics.
+    public let metrics: [String: Double]
+    /// Strategy used.
+    public let strategy: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case modelId = "model_id"
+        case weightsData = "weights_data"
+        case metrics
+        case strategy
     }
 }
 

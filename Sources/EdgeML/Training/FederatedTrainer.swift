@@ -66,20 +66,28 @@ public actor FederatedTrainer {
 
         let trainingTime = Date().timeIntervalSince(startTime)
 
-        // Extract metrics from context
+        // Extract real metrics from CoreML MLUpdateContext
         let loss = extractLoss(from: updateContext)
         let accuracy = extractAccuracy(from: updateContext)
+
+        // Build metrics dict: config params + real training metrics from CoreML
+        var metricsDict: [String: Double] = [
+            "epochs": Double(config.epochs),
+            "batch_size": Double(config.batchSize),
+            "learning_rate": config.learningRate,
+        ]
+        // Merge real metrics from MLUpdateContext
+        let realMetrics = extractAllMetrics(from: updateContext)
+        for (key, value) in realMetrics {
+            metricsDict[key] = value
+        }
 
         let result = TrainingResult(
             sampleCount: data.count,
             loss: loss,
             accuracy: accuracy,
             trainingTime: trainingTime,
-            metrics: [
-                "epochs": Double(config.epochs),
-                "batch_size": Double(config.batchSize),
-                "learning_rate": config.learningRate
-            ]
+            metrics: metricsDict
         )
 
         if configuration.enableLogging {
@@ -160,7 +168,8 @@ public actor FederatedTrainer {
             deviceId: nil,
             weightsData: weightsData,
             sampleCount: trainingResult.sampleCount,
-            metrics: metrics
+            metrics: metrics,
+            roundId: nil
         )
     }
 
@@ -226,32 +235,40 @@ public actor FederatedTrainer {
     }
 
     private func extractLoss(from context: MLUpdateContext) -> Double? {
-        // Extract loss from update context metrics
-        if let metrics = context.metrics[.lossValue] {
-            return metrics as? Double
+        // Use the real CoreML MLMetricKey.lossValue to extract training loss
+        if let lossValue = context.metrics[.lossValue] {
+            return (lossValue as? NSNumber)?.doubleValue
         }
         return nil
     }
 
-    private func extractAccuracy(from _: MLUpdateContext) -> Double? {
-        // Check if accuracy metric is available
-        // This depends on the model's configuration
+    private func extractAccuracy(from context: MLUpdateContext) -> Double? {
+        // Use the real CoreML MLMetricKey.epochIndex as a proxy check;
+        // accuracy is available if the model reports it in metrics
+        if let epochIndex = context.metrics[.epochIndex] {
+            // epochIndex exists, model is reporting metrics - check for custom accuracy
+            _ = epochIndex
+        }
+        // CoreML does not have a built-in accuracy metric key, but some models
+        // expose it through custom training configuration. The loss value is
+        // the primary metric provided by MLUpdateContext.
         return nil
     }
-}
 
-// MARK: - MLUpdateContext Extension
+    /// Extracts all available metrics from an MLUpdateContext as a dictionary.
+    private func extractAllMetrics(from context: MLUpdateContext) -> [String: Double] {
+        var result: [String: Double] = [:]
 
-extension MLUpdateContext {
-    /// Available metric keys
-    enum MetricKey: String {
-        case lossValue = "MLMetricKeyLossValue"
-    }
+        if let loss = context.metrics[.lossValue] as? NSNumber {
+            result["loss"] = loss.doubleValue
+        }
+        if let epoch = context.metrics[.epochIndex] as? NSNumber {
+            result["epoch_index"] = epoch.doubleValue
+        }
+        if let miniBatch = context.metrics[.miniBatchIndex] as? NSNumber {
+            result["mini_batch_index"] = miniBatch.doubleValue
+        }
 
-    /// Get metrics by key
-    var metrics: [MetricKey: Any] {
-        // In a real implementation, you would access the context's metrics
-        // This is a simplified placeholder
-        return [:]
+        return result
     }
 }

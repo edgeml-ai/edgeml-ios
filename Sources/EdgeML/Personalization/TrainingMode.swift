@@ -42,12 +42,31 @@ public enum TrainingMode: String, Codable {
     /// - When users opt-in to sharing
     case federated
 
+    /// Ditto personalization mode.
+    ///
+    /// In this mode:
+    /// - Maintains both a global model (for federation) and a personal model
+    /// - Global model trains using FedAvg then personal model fine-tunes with
+    ///   L2 regularization toward the global model (lambda_ditto)
+    /// - Uploads global model updates to server
+    /// - Personal model stays on-device
+    case ditto
+
+    /// FedPer (Federated Personalization) mode.
+    ///
+    /// In this mode:
+    /// - Model is split into "body" (shared/federated) and "head" (personalized) layers
+    /// - Only body layer weights are uploaded/downloaded from server
+    /// - Head layers are trained and kept locally for personalization
+    /// - Configured via `personalizedLayers` in round strategy params
+    case fedPer = "fed_per"
+
     /// Whether this mode uploads updates to the server.
     public var uploadsToServer: Bool {
         switch self {
         case .localOnly:
             return false
-        case .federated:
+        case .federated, .ditto, .fedPer:
             return true
         }
     }
@@ -59,6 +78,10 @@ public enum TrainingMode: String, Codable {
             return "Your model learns your patterns. Data never leaves your device."
         case .federated:
             return "Your model learns from millions while keeping your data private."
+        case .ditto:
+            return "Dual-model training: global collaboration with personal fine-tuning."
+        case .fedPer:
+            return "Split model: shared backbone with personalized prediction layers."
         }
     }
 
@@ -67,7 +90,7 @@ public enum TrainingMode: String, Codable {
         switch self {
         case .localOnly:
             return "Maximum"
-        case .federated:
+        case .federated, .ditto, .fedPer:
             return "High"
         }
     }
@@ -79,6 +102,10 @@ public enum TrainingMode: String, Codable {
             return "0 bytes"
         case .federated:
             return "Encrypted weight deltas only"
+        case .ditto:
+            return "Global model weight deltas only"
+        case .fedPer:
+            return "Shared body layer weights only"
         }
     }
 }

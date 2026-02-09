@@ -78,6 +78,14 @@ public enum EdgeMLError: LocalizedError, Sendable {
     /// Keychain operation failed.
     case keychainError(status: OSStatus)
 
+    // MARK: - Round Management Errors
+
+    /// No round assignment available for this device.
+    case noRoundAssignment
+
+    /// Round has already been completed or expired.
+    case roundExpired(roundId: String)
+
     // MARK: - General Errors
 
     /// An unexpected error occurred.
@@ -132,6 +140,10 @@ public enum EdgeMLError: LocalizedError, Sendable {
             return "Failed to upload weights: \(reason)"
         case .keychainError(let status):
             return "Keychain error (status: \(status))"
+        case .noRoundAssignment:
+            return "No training round is currently assigned to this device."
+        case .roundExpired(let roundId):
+            return "Training round '\(roundId)' has expired or been completed."
         case .unknown(let underlying):
             if let error = underlying {
                 return "An unexpected error occurred: \(error.localizedDescription)"

@@ -548,7 +548,8 @@ public final class EdgeMLClient: @unchecked Sendable {
             deviceId: deviceId,
             weightsData: weightUpdate.weightsData,
             sampleCount: weightUpdate.sampleCount,
-            metrics: weightUpdate.metrics
+            metrics: weightUpdate.metrics,
+            roundId: nil
         )
 
         try await apiClient.uploadWeights(weightUpdate)
@@ -588,6 +589,174 @@ public final class EdgeMLClient: @unchecked Sendable {
             dataProvider: { data },
             config: config
         )
+    }
+
+    // MARK: - Round-Based Training
+
+    /// Checks if a training round is assigned to this device for the given model.
+    ///
+    /// - Parameter modelId: The model to check for round assignments.
+    /// - Returns: Round assignment if available, nil otherwise.
+    /// - Throws: `EdgeMLError` if the request fails.
+    public func checkRoundAssignment(modelId: String) async throws -> RoundAssignment? {
+        guard let deviceId = self.deviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        return try await apiClient.checkRoundAssignment(deviceId: deviceId, modelId: modelId)
+    }
+
+    /// Participates in a specific server-assigned training round.
+    ///
+    /// This method:
+    /// 1. Verifies round assignment
+    /// 2. Downloads the model version specified by the round
+    /// 3. Trains locally using round config (strategy params, epochs, learning rate)
+    /// 4. Applies gradient clipping if configured in the round's filter pipeline
+    /// 5. Uploads weight delta with the round ID
+    ///
+    /// - Parameters:
+    ///   - roundId: The round identifier to participate in.
+    ///   - modelId: The model to train.
+    ///   - dataProvider: Closure that provides training data.
+    /// - Returns: Result of the training round.
+    /// - Throws: `EdgeMLError` if training fails.
+    public func participateInRound(
+        roundId: String,
+        modelId: String,
+        dataProvider: @escaping () -> MLBatchProvider
+    ) async throws -> RoundResult {
+        guard let deviceId = self.deviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        if configuration.enableLogging {
+            logger.info("Participating in round \(roundId) for model: \(modelId)")
+        }
+
+        // Check assignment
+        guard let assignment = try await apiClient.checkRoundAssignment(deviceId: deviceId, modelId: modelId),
+              assignment.roundId == roundId else {
+            throw EdgeMLError.noRoundAssignment
+        }
+
+        // Download the specific model version for this round
+        let model = try await downloadModel(modelId: modelId, version: assignment.modelVersion)
+
+        // Build training config from round strategy params
+        let strategyParams = assignment.strategyParams
+        let config = TrainingConfig(
+            epochs: strategyParams?.localEpochs ?? 1,
+            batchSize: 32,
+            learningRate: strategyParams?.learningRate ?? 0.001,
+            shuffle: true
+        )
+
+        // Train locally
+        let trainer = FederatedTrainer(configuration: configuration)
+        let trainingResult = try await trainer.train(
+            model: model,
+            dataProvider: dataProvider,
+            config: config
+        )
+
+        // Extract weight update
+        var weightUpdate = try await trainer.extractWeightUpdate(
+            model: model,
+            trainingResult: trainingResult
+        )
+
+        // Apply gradient clipping if configured in round filter pipeline
+        var clippedWeightsData = weightUpdate.weightsData
+        if let clipConfig = assignment.filterConfig?.gradientClip {
+            let extractor = WeightExtractor()
+            clippedWeightsData = await extractor.applyGradientClipping(
+                weightsData: weightUpdate.weightsData,
+                maxNorm: clipConfig.maxNorm
+            )
+
+            if configuration.enableLogging {
+                logger.info("Applied gradient clipping with max_norm=\(clipConfig.maxNorm)")
+            }
+        }
+
+        // Build final weight update with round ID and device ID
+        weightUpdate = WeightUpdate(
+            modelId: weightUpdate.modelId,
+            version: weightUpdate.version,
+            deviceId: deviceId,
+            weightsData: clippedWeightsData,
+            sampleCount: weightUpdate.sampleCount,
+            metrics: weightUpdate.metrics,
+            roundId: roundId
+        )
+
+        try await apiClient.uploadWeights(weightUpdate)
+
+        let roundResult = RoundResult(
+            roundId: roundId,
+            trainingResult: trainingResult,
+            uploadSucceeded: true,
+            completedAt: Date()
+        )
+
+        if configuration.enableLogging {
+            logger.info("Round \(roundId) completed: \(trainingResult.sampleCount) samples, strategy: \(assignment.strategy ?? "fedavg")")
+        }
+
+        return roundResult
+    }
+
+    // MARK: - Personalization
+
+    /// Gets personalized model state from the server.
+    ///
+    /// - Parameter deviceId: Device ID (defaults to this device's ID).
+    /// - Returns: Personalized model response.
+    /// - Throws: `EdgeMLError` if the request fails.
+    public func getPersonalizedModel(deviceId: String? = nil) async throws -> PersonalizedModelResponse {
+        let resolvedDeviceId = deviceId ?? self.deviceId
+        guard let id = resolvedDeviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        return try await apiClient.getPersonalizedModel(deviceId: id)
+    }
+
+    /// Uploads a personalized model update to the server.
+    ///
+    /// - Parameters:
+    ///   - deviceId: Device ID (defaults to this device's ID).
+    ///   - modelId: Model identifier.
+    ///   - weightsData: Personalized weight data.
+    ///   - metrics: Training metrics.
+    ///   - strategy: Personalization strategy used (e.g., "ditto", "fedper").
+    /// - Throws: `EdgeMLError` if the upload fails.
+    public func uploadPersonalizedUpdate(
+        deviceId: String? = nil,
+        modelId: String,
+        weightsData: Data,
+        metrics: [String: Double],
+        strategy: String? = nil
+    ) async throws {
+        let resolvedDeviceId = deviceId ?? self.deviceId
+        guard let id = resolvedDeviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        let request = PersonalizedUpdateRequest(
+            deviceId: id,
+            modelId: modelId,
+            weightsData: weightsData,
+            metrics: metrics,
+            strategy: strategy
+        )
+
+        try await apiClient.uploadPersonalizedUpdate(request)
+
+        if configuration.enableLogging {
+            logger.info("Uploaded personalized update for model: \(modelId)")
+        }
     }
 
     // MARK: - Background Operations

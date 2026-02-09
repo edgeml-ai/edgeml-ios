@@ -406,7 +406,8 @@ final class APIModelsTests: XCTestCase {
             deviceId: "device-uuid-123",
             weightsData: weightsData,
             sampleCount: 500,
-            metrics: ["loss": 0.05, "accuracy": 0.98]
+            metrics: ["loss": 0.05, "accuracy": 0.98],
+            roundId: nil
         )
 
         let encoder = JSONEncoder()
@@ -428,7 +429,8 @@ final class APIModelsTests: XCTestCase {
             deviceId: nil,
             weightsData: weightsData,
             sampleCount: 100,
-            metrics: ["loss": 0.1]
+            metrics: ["loss": 0.1],
+            roundId: nil
         )
 
         let encoder = JSONEncoder()

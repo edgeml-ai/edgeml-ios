@@ -236,6 +236,64 @@ public actor APIClient {
         let _: EmptyResponse = try await performRequest(urlRequest)
     }
 
+    // MARK: - Round Management
+
+    /// Checks for a round assignment for this device.
+    /// - Parameters:
+    ///   - deviceId: Server-assigned device UUID.
+    ///   - modelId: Model ID to check for assignments.
+    /// - Returns: Round assignment if one is available, nil otherwise.
+    public func checkRoundAssignment(deviceId: String, modelId: String) async throws -> RoundAssignment? {
+        var components = URLComponents(
+            url: serverURL.appendingPathComponent("api/v1/training/rounds"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "device_id", value: deviceId),
+            URLQueryItem(name: "model_id", value: modelId),
+        ]
+
+        var urlRequest = URLRequest(url: components.url!)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        do {
+            let response: RoundAssignmentResponse = try await performRequest(urlRequest)
+            return response.assignment
+        } catch EdgeMLError.serverError(let statusCode, _) where statusCode == 404 {
+            return nil
+        }
+    }
+
+    // MARK: - Personalization
+
+    /// Gets personalized model state for a device.
+    /// - Parameter deviceId: Server-assigned device UUID.
+    /// - Returns: Personalized model response.
+    public func getPersonalizedModel(deviceId: String) async throws -> PersonalizedModelResponse {
+        let url = serverURL.appendingPathComponent("api/v1/training/personalized/\(deviceId)")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        return try await performRequest(urlRequest)
+    }
+
+    /// Uploads a personalized model update for a device.
+    /// - Parameter request: Personalized update request.
+    public func uploadPersonalizedUpdate(_ request: PersonalizedUpdateRequest) async throws {
+        let url = serverURL.appendingPathComponent("api/v1/training/personalized/\(request.deviceId)")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        try configureHeaders(&urlRequest)
+        urlRequest.httpBody = try jsonEncoder.encode(request)
+
+        let _: EmptyResponse = try await performRequest(urlRequest)
+    }
+
     /// Tracks an event on the server.
     /// - Parameters:
     ///   - experimentId: Experiment identifier.
