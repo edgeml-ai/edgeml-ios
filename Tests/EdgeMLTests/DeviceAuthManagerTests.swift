@@ -266,7 +266,7 @@ private final class MockURLProtocol: URLProtocol {
         switch next {
         case let .failure(error):
             client?.urlProtocol(self, didFailWithError: error)
-        case let .success(statusCode, json):
+        case let .success(statusCode: statusCode, json: json):
             do {
                 let data = try JSONSerialization.data(withJSONObject: json)
                 let response = HTTPURLResponse(
@@ -281,7 +281,7 @@ private final class MockURLProtocol: URLProtocol {
             } catch {
                 client?.urlProtocol(self, didFailWithError: error)
             }
-        case let .success(statusCode, body):
+        case let .success(statusCode: statusCode, body: body):
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: statusCode,

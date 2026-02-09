@@ -8,10 +8,7 @@ final class APIModelsTests: XCTestCase {
     func testDeviceCapabilitiesEncoding() throws {
         let capabilities = DeviceCapabilities(
             supportsTraining: true,
-            coreMLVersion: "5.0",
-            osVersion: "17.0",
-            deviceModel: "iPhone15,2",
-            availableStorage: 1024 * 1024 * 1024,
+            coremlVersion: "5.0",
             hasNeuralEngine: true
         )
 
@@ -21,34 +18,36 @@ final class APIModelsTests: XCTestCase {
 
         XCTAssertEqual(json["supports_training"] as? Bool, true)
         XCTAssertEqual(json["coreml_version"] as? String, "5.0")
-        XCTAssertEqual(json["os_version"] as? String, "17.0")
-        XCTAssertEqual(json["device_model"] as? String, "iPhone15,2")
-        XCTAssertEqual(json["available_storage"] as? UInt64, 1024 * 1024 * 1024)
         XCTAssertEqual(json["has_neural_engine"] as? Bool, true)
     }
 
     func testDeviceRegistrationRequestEncoding() throws {
         let capabilities = DeviceCapabilities(
             supportsTraining: true,
-            coreMLVersion: "5.0",
-            osVersion: "17.0",
-            deviceModel: "iPhone15,2",
-            availableStorage: 1024 * 1024 * 1024,
+            coremlVersion: "5.0",
             hasNeuralEngine: true
         )
 
         let request = DeviceRegistrationRequest(
-            deviceId: "test-device-123",
+            deviceIdentifier: "test-device-123",
+            orgId: "test-org",
+            platform: "ios",
+            osVersion: nil,
+            sdkVersion: nil,
+            appVersion: nil,
+            deviceInfo: nil,
+            locale: nil,
+            region: nil,
+            timezone: nil,
             metadata: ["app_version": "1.0.0"],
-            capabilities: capabilities,
-            platform: "ios"
+            capabilities: capabilities
         )
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["device_id"] as? String, "test-device-123")
+        XCTAssertEqual(json["device_identifier"] as? String, "test-device-123")
         XCTAssertEqual(json["platform"] as? String, "ios")
         XCTAssertNotNil(json["capabilities"])
         XCTAssertNotNil(json["metadata"])
@@ -57,10 +56,11 @@ final class APIModelsTests: XCTestCase {
     func testDeviceRegistrationDecoding() throws {
         let json = """
         {
-            "device_id": "abc-123",
-            "token": "secret-token",
-            "registered_at": "2024-01-15T10:30:00Z",
-            "bucket": 42
+            "id": "abc-123",
+            "device_identifier": "test-device",
+            "org_id": "org-123",
+            "status": "active",
+            "registered_at": "2024-01-15T10:30:00Z"
         }
         """
 
@@ -69,9 +69,9 @@ final class APIModelsTests: XCTestCase {
 
         let registration = try decoder.decode(DeviceRegistrationResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(registration.deviceId, "abc-123")
-        XCTAssertEqual(registration.token, "secret-token")
-        XCTAssertEqual(registration.bucket, 42)
+        XCTAssertEqual(registration.id, "abc-123")
+        XCTAssertEqual(registration.deviceIdentifier, "test-device")
+        XCTAssertEqual(registration.orgId, "org-123")
     }
 
     // MARK: - Model Metadata Tests
