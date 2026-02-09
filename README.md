@@ -4,6 +4,8 @@
 [![codecov](https://codecov.io/gh/edgeml-ai/edgeml-ios/branch/main/graph/badge.svg)](https://codecov.io/gh/edgeml-ai/edgeml-ios)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/edgeml-ai/edgeml-ios/badge)](https://scorecard.dev/viewer/?uri=github.com/edgeml-ai/edgeml-ios)
+[![CodeQL](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/codeql.yml/badge.svg)](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/codeql.yml)
 [![Swift Version](https://img.shields.io/badge/Swift-5.5%2B-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/edgeml-ai/edgeml-ios)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
