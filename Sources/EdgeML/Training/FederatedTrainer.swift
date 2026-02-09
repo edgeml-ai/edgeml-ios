@@ -177,10 +177,14 @@ public actor FederatedTrainer {
                 let parameters = try self.configureTrainingParameters(config: config)
 
                 // Create update task
-                let updateTask = try MLUpdateTask(
-                    forModelAt: modelURL,
-                    trainingData: trainingData,
-                    configuration: parameters,
+                let progressHandlers = MLUpdateProgressHandlers(
+                    forEvents: [.epochEnd],
+                    progressHandler: { contextProgress in
+                        let progress = contextProgress.progress
+                        if self.configuration.enableLogging {
+                            self.logger.debug("Training progress: \(Int(progress.fractionCompleted * 100))%")
+                        }
+                    },
                     completionHandler: { context in
                         switch context.task.state {
                         case .completed:
@@ -195,13 +199,12 @@ public actor FederatedTrainer {
                     }
                 )
 
-                // Add progress handler
-                updateTask.progressHandler = { contextProgress in
-                    let progress = contextProgress.progress
-                    if self.configuration.enableLogging {
-                        self.logger.debug("Training progress: \(Int(progress.fractionCompleted * 100))%")
-                    }
-                }
+                let updateTask = try MLUpdateTask(
+                    forModelAt: modelURL,
+                    trainingData: trainingData,
+                    configuration: parameters,
+                    progressHandlers: progressHandlers
+                )
 
                 // Start training
                 updateTask.resume()
