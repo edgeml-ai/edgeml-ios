@@ -280,11 +280,3 @@ actor WeightExtractor {
         return data
     }
 }
-
-// MARK: - EdgeMLError Extension
-
-extension EdgeMLError {
-    static func weightExtractionFailed(reason: String) -> EdgeMLError {
-        return .unknown(reason: "Weight extraction failed: \(reason)")
-    }
-}

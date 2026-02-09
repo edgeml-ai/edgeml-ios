@@ -67,7 +67,7 @@ final class APIModelsTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let registration = try decoder.decode(DeviceRegistration.self, from: json.data(using: .utf8)!)
+        let registration = try decoder.decode(DeviceRegistrationResponse.self, from: json.data(using: .utf8)!)
 
         XCTAssertEqual(registration.deviceId, "abc-123")
         XCTAssertEqual(registration.token, "secret-token")
