@@ -59,76 +59,14 @@ public actor ModelManager {
         // Start download task
         let task = Task<EdgeMLModel, Error> {
             defer {
-                Task {
-                    await self.removeDownloadTask(cacheKey)
-                }
+                Task { await self.removeDownloadTask(cacheKey) }
             }
 
-            // Get metadata
             let metadata = try await apiClient.getModelMetadata(modelId: modelId, version: version)
-
-            // Get download URL
-            let downloadInfo = try await apiClient.getDownloadURL(
-                modelId: modelId,
-                version: version,
-                format: "coreml"
+            let modelData = try await fetchAndVerifyModelData(modelId: modelId, version: version)
+            let model = try await compileAndCacheModel(
+                modelId: modelId, version: version, modelData: modelData, metadata: metadata
             )
-
-            guard let downloadURL = URL(string: downloadInfo.url) else {
-                throw EdgeMLError.invalidRequest(reason: "Invalid download URL")
-            }
-
-            // Download model file
-            let modelData = try await apiClient.downloadData(from: downloadURL)
-
-            // Verify checksum
-            let checksum = SHA256.hash(data: modelData).compactMap { String(format: "%02x", $0) }.joined()
-            guard checksum == downloadInfo.checksum else {
-                throw EdgeMLError.checksumMismatch
-            }
-
-            // Save to temporary file
-            let tempDir = fileManager.temporaryDirectory
-            let tempFile = tempDir.appendingPathComponent("\(modelId)_\(version).mlmodel")
-            try modelData.write(to: tempFile)
-
-            // Compile model
-            let compiledURL: URL
-            do {
-                compiledURL = try MLModel.compileModel(at: tempFile)
-            } catch {
-                throw EdgeMLError.modelCompilationFailed(reason: error.localizedDescription)
-            }
-
-            // Move to cache directory
-            let cacheURL = try await self.modelCache.cacheCompiledModel(
-                modelId: modelId,
-                version: version,
-                compiledURL: compiledURL
-            )
-
-            // Load model
-            let mlModel: MLModel
-            do {
-                mlModel = try MLModel(contentsOf: cacheURL)
-            } catch {
-                throw EdgeMLError.modelCompilationFailed(reason: error.localizedDescription)
-            }
-
-            // Clean up temp file
-            try? fileManager.removeItem(at: tempFile)
-
-            // Create EdgeMLModel
-            let model = EdgeMLModel(
-                id: modelId,
-                version: version,
-                mlModel: mlModel,
-                metadata: metadata,
-                compiledModelURL: cacheURL
-            )
-
-            // Store in memory cache
-            await self.modelCache.store(model)
 
             if self.configuration.enableLogging {
                 self.logger.info("Model downloaded: \(modelId)@\(version)")
@@ -169,5 +107,78 @@ public actor ModelManager {
     /// Gets the size of the cache in bytes.
     public nonisolated func getCacheSize() -> UInt64 {
         return modelCache.currentSize
+    }
+
+    // MARK: - Private Helpers
+
+    private func fetchAndVerifyModelData(modelId: String, version: String) async throws -> Data {
+        let downloadInfo = try await apiClient.getDownloadURL(
+            modelId: modelId,
+            version: version,
+            format: "coreml"
+        )
+
+        guard let downloadURL = URL(string: downloadInfo.url) else {
+            throw EdgeMLError.invalidRequest(reason: "Invalid download URL")
+        }
+
+        let modelData = try await apiClient.downloadData(from: downloadURL)
+
+        // Verify checksum
+        let checksum = SHA256.hash(data: modelData).compactMap { String(format: "%02x", $0) }.joined()
+        guard checksum == downloadInfo.checksum else {
+            throw EdgeMLError.checksumMismatch
+        }
+
+        return modelData
+    }
+
+    private func compileAndCacheModel(
+        modelId: String,
+        version: String,
+        modelData: Data,
+        metadata: ModelMetadata
+    ) async throws -> EdgeMLModel {
+        // Save to temporary file
+        let tempFile = fileManager.temporaryDirectory
+            .appendingPathComponent("\(modelId)_\(version).mlmodel")
+        try modelData.write(to: tempFile)
+
+        defer { try? fileManager.removeItem(at: tempFile) }
+
+        // Compile model
+        let compiledURL: URL
+        do {
+            compiledURL = try MLModel.compileModel(at: tempFile)
+        } catch {
+            throw EdgeMLError.modelCompilationFailed(reason: error.localizedDescription)
+        }
+
+        // Move to cache directory
+        let cacheURL = try await modelCache.cacheCompiledModel(
+            modelId: modelId,
+            version: version,
+            compiledURL: compiledURL
+        )
+
+        // Load model
+        let mlModel: MLModel
+        do {
+            mlModel = try MLModel(contentsOf: cacheURL)
+        } catch {
+            throw EdgeMLError.modelCompilationFailed(reason: error.localizedDescription)
+        }
+
+        let model = EdgeMLModel(
+            id: modelId,
+            version: version,
+            mlModel: mlModel,
+            metadata: metadata,
+            compiledModelURL: cacheURL
+        )
+
+        await modelCache.store(model)
+
+        return model
     }
 }

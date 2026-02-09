@@ -74,7 +74,7 @@ public actor FederatedTrainer {
         var metricsDict: [String: Double] = [
             "epochs": Double(config.epochs),
             "batch_size": Double(config.batchSize),
-            "learning_rate": config.learningRate,
+            "learning_rate": config.learningRate
         ]
         // Merge real metrics from MLUpdateContext
         let realMetrics = extractAllMetrics(from: updateContext)
@@ -141,7 +141,9 @@ public actor FederatedTrainer {
             } catch {
                 // Fall back to full weights if delta extraction fails
                 if configuration.enableLogging {
-                    logger.warning("Delta extraction failed, falling back to full weights: \(error.localizedDescription)")
+                    logger.warning(
+                        "Delta extraction failed, falling back to full weights: \(error.localizedDescription)"
+                    )
                 }
 
                 weightsData = try await weightExtractor.extractFullWeights(
@@ -188,7 +190,7 @@ public actor FederatedTrainer {
                 // Create update task
                 let progressHandlers = MLUpdateProgressHandlers(
                     forEvents: [.epochEnd],
-                    progressHandler: { context in
+                    progressHandler: { _ in
                         if self.configuration.enableLogging {
                             self.logger.debug("Training epoch completed")
                         }

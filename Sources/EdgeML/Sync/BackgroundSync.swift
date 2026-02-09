@@ -49,14 +49,16 @@ public final class BackgroundSync: @unchecked Sendable {
             forTaskWithIdentifier: trainingTaskIdentifier,
             using: nil
         ) { task in
-            shared.handleTrainingTask(task as! BGProcessingTask)
+            guard let processingTask = task as? BGProcessingTask else { return }
+            shared.handleTrainingTask(processingTask)
         }
 
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: syncTaskIdentifier,
             using: nil
         ) { task in
-            shared.handleSyncTask(task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else { return }
+            shared.handleSyncTask(refreshTask)
         }
         #else
         shared.logger.warning("Background tasks are only available on iOS")
@@ -202,7 +204,7 @@ public final class BackgroundSync: @unchecked Sendable {
         let syncTask = Task {
             do {
                 // Check for model updates
-                if let _ = try await client.checkForUpdates(modelId: modelId) {
+                if try await client.checkForUpdates(modelId: modelId) != nil {
                     // Download update
                     _ = try await client.downloadModel(modelId: modelId)
                     logger.info("Downloaded model update in background")

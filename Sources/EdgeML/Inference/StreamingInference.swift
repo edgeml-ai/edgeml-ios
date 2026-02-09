@@ -94,6 +94,16 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
     private let sessionId: String
     private let modality: Modality
 
+    /// Shared mutable state protected by the serial nature of the stream consumer.
+    fileprivate final class State: @unchecked Sendable {
+        var sessionStart: Date?
+        var firstChunkTime: Date?
+        var previousChunkTime: Date?
+        var latencies: [Double] = []
+        var chunkCount = 0
+        var result: StreamingInferenceResult?
+    }
+
     public init(sessionId: String = UUID().uuidString, modality: Modality) {
         self.sessionId = sessionId
         self.modality = modality
@@ -111,19 +121,7 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
         let sessionId = self.sessionId
         let modality = self.modality
-
-        // Shared mutable state protected by the serial nature of the stream consumer.
-        final class State: @unchecked Sendable {
-            var sessionStart: Date?
-            var firstChunkTime: Date?
-            var previousChunkTime: Date?
-            var latencies: [Double] = []
-            var chunkCount = 0
-            var result: StreamingInferenceResult?
-        }
-
         let state = State()
-
         let rawStream = engine.generate(input: input, modality: modality)
 
         let timedStream = AsyncThrowingStream<InferenceChunk, Error> { continuation in
@@ -134,49 +132,14 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
 
                 do {
                     for try await rawChunk in rawStream {
-                        let now = Date()
-
-                        if state.firstChunkTime == nil {
-                            state.firstChunkTime = now
-                        }
-
-                        let latencyMs = now.timeIntervalSince(state.previousChunkTime ?? start) * 1000
-                        state.previousChunkTime = now
-                        state.latencies.append(latencyMs)
-                        state.chunkCount += 1
-
-                        let chunk = InferenceChunk(
-                            index: state.chunkCount - 1,
-                            data: rawChunk.data,
-                            modality: modality,
-                            timestamp: now,
-                            latencyMs: latencyMs
-                        )
-
+                        let chunk = Self.processChunk(rawChunk, state: state, modality: modality, start: start)
                         continuation.yield(chunk)
                     }
 
-                    // Build result
-                    let end = Date()
-                    let totalDurationMs = end.timeIntervalSince(start) * 1000
-                    let ttfcMs = (state.firstChunkTime ?? end).timeIntervalSince(start) * 1000
-                    let avgLatency = state.latencies.isEmpty
-                        ? 0.0
-                        : state.latencies.reduce(0, +) / Double(state.latencies.count)
-                    let throughput = totalDurationMs > 0
-                        ? Double(state.chunkCount) / (totalDurationMs / 1000)
-                        : 0.0
-
-                    state.result = StreamingInferenceResult(
-                        sessionId: sessionId,
-                        modality: modality,
-                        ttfcMs: ttfcMs,
-                        avgChunkLatencyMs: avgLatency,
-                        totalChunks: state.chunkCount,
-                        totalDurationMs: totalDurationMs,
-                        throughput: throughput
+                    state.result = Self.buildResult(
+                        state: state, sessionId: sessionId,
+                        modality: modality, start: start
                     )
-
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -189,5 +152,60 @@ public final class InstrumentedStreamWrapper: @unchecked Sendable {
         }
 
         return (timedStream, { state.result })
+    }
+
+    // MARK: - Private Helpers
+
+    private static func processChunk(
+        _ rawChunk: InferenceChunk,
+        state: State,
+        modality: Modality,
+        start: Date
+    ) -> InferenceChunk {
+        let now = Date()
+
+        if state.firstChunkTime == nil {
+            state.firstChunkTime = now
+        }
+
+        let latencyMs = now.timeIntervalSince(state.previousChunkTime ?? start) * 1000
+        state.previousChunkTime = now
+        state.latencies.append(latencyMs)
+        state.chunkCount += 1
+
+        return InferenceChunk(
+            index: state.chunkCount - 1,
+            data: rawChunk.data,
+            modality: modality,
+            timestamp: now,
+            latencyMs: latencyMs
+        )
+    }
+
+    private static func buildResult(
+        state: State,
+        sessionId: String,
+        modality: Modality,
+        start: Date
+    ) -> StreamingInferenceResult {
+        let end = Date()
+        let totalDurationMs = end.timeIntervalSince(start) * 1000
+        let ttfcMs = (state.firstChunkTime ?? end).timeIntervalSince(start) * 1000
+        let avgLatency = state.latencies.isEmpty
+            ? 0.0
+            : state.latencies.reduce(0, +) / Double(state.latencies.count)
+        let throughput = totalDurationMs > 0
+            ? Double(state.chunkCount) / (totalDurationMs / 1000)
+            : 0.0
+
+        return StreamingInferenceResult(
+            sessionId: sessionId,
+            modality: modality,
+            ttfcMs: ttfcMs,
+            avgChunkLatencyMs: avgLatency,
+            totalChunks: state.chunkCount,
+            totalDurationMs: totalDurationMs,
+            throughput: throughput
+        )
     }
 }

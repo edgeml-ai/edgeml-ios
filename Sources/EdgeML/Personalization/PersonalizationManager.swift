@@ -15,38 +15,38 @@ public actor PersonalizationManager {
 
     // MARK: - Properties
 
-    private let configuration: EdgeMLConfiguration
-    private let trainer: FederatedTrainer
-    private let logger: Logger
+    let configuration: EdgeMLConfiguration
+    let trainer: FederatedTrainer
+    let logger: Logger
 
     // Training buffer
-    private var trainingBuffer: [TrainingSample] = []
-    private let bufferSizeThreshold: Int
-    private let minSamplesForTraining: Int
+    var trainingBuffer: [TrainingSample] = []
+    let bufferSizeThreshold: Int
+    let minSamplesForTraining: Int
 
     // Personalized model management
-    private var personalizedModel: EdgeMLModel?
-    private var baseModel: EdgeMLModel?
-    private var trainingHistory: [TrainingSession] = []
+    var personalizedModel: EdgeMLModel?
+    var baseModel: EdgeMLModel?
+    var trainingHistory: [TrainingSession] = []
 
     // Ditto mode: separate global model for federation
-    private var globalModel: EdgeMLModel?
+    fileprivate var globalModel: EdgeMLModel?
 
     // FedPer mode: layers that are personalized (head) vs shared (body)
-    private var personalizedLayers: Set<String> = []
+    fileprivate var personalizedLayers: Set<String> = []
 
     // Ditto regularization strength
-    private var lambdaDitto: Double = 0.1
+    fileprivate var lambdaDitto: Double = 0.1
 
     // State
-    private var isTraining = false
-    private var lastTrainingDate: Date?
+    var isTraining = false
+    var lastTrainingDate: Date?
 
     // Configuration
-    private let maxBufferSize: Int
-    private let trainingInterval: TimeInterval // Minimum time between training sessions
-    private let trainingMode: TrainingMode
-    private let uploadThreshold: Int // Number of training sessions before upload
+    let maxBufferSize: Int
+    let trainingInterval: TimeInterval // Minimum time between training sessions
+    let trainingMode: TrainingMode
+    let uploadThreshold: Int // Number of training sessions before upload
 
     // MARK: - Initialization
 
@@ -78,8 +78,11 @@ public actor PersonalizationManager {
         self.uploadThreshold = uploadThreshold
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "PersonalizationManager")
     }
+}
 
-    // MARK: - Model Management
+// MARK: - Model Management
+
+extension PersonalizationManager {
 
     /// Sets the base model for personalization.
     /// - Parameter model: The base model to personalize.
@@ -105,7 +108,9 @@ public actor PersonalizationManager {
                 }
             } catch {
                 if configuration.enableLogging {
-                    logger.error("Failed to load personalized model: \(error.localizedDescription)")
+                    logger.error(
+                        "Failed to load personalized model: \(error.localizedDescription)"
+                    )
                 }
             }
         }
@@ -135,142 +140,11 @@ public actor PersonalizationManager {
             logger.info("Reset personalization for model \(model.id)")
         }
     }
+}
 
-    // MARK: - Training Data Collection
+// MARK: - Statistics & Buffer
 
-    /// Adds a training sample to the buffer.
-    ///
-    /// When the buffer reaches the threshold, training is automatically triggered.
-    ///
-    /// - Parameters:
-    ///   - input: Input data for training.
-    ///   - target: Expected output / label.
-    ///   - metadata: Optional metadata about the sample (e.g., timestamp, context).
-    public func addTrainingSample(
-        input: MLFeatureProvider,
-        target: MLFeatureProvider,
-        metadata: [String: Any]? = nil
-    ) async throws {
-        let sample = TrainingSample(
-            input: input,
-            target: target,
-            timestamp: Date(),
-            metadata: metadata
-        )
-
-        trainingBuffer.append(sample)
-
-        // Enforce max buffer size
-        if trainingBuffer.count > maxBufferSize {
-            trainingBuffer.removeFirst(trainingBuffer.count - maxBufferSize)
-
-            if configuration.enableLogging {
-                logger.warning("Training buffer exceeded max size, removed oldest samples")
-            }
-        }
-
-        // Check if we should trigger training
-        if shouldTriggerTraining() {
-            try await trainIncrementally()
-        }
-    }
-
-    /// Adds multiple training samples at once.
-    public func addTrainingSamples(_ samples: [(input: MLFeatureProvider, target: MLFeatureProvider)]) async throws {
-        for (input, target) in samples {
-            try await addTrainingSample(input: input, target: target)
-        }
-    }
-
-    // MARK: - Incremental Training
-
-    /// Triggers incremental training on buffered samples.
-    ///
-    /// This happens automatically when the buffer threshold is reached,
-    /// but can also be called manually.
-    public func trainIncrementally() async throws {
-        guard !isTraining else {
-            if configuration.enableLogging {
-                logger.debug("Training already in progress, skipping")
-            }
-            return
-        }
-
-        guard trainingBuffer.count >= minSamplesForTraining else {
-            if configuration.enableLogging {
-                logger.debug("Not enough samples for training (\(self.trainingBuffer.count) < \(self.minSamplesForTraining))")
-            }
-            return
-        }
-
-        guard let model = getCurrentModel() else {
-            throw EdgeMLError.trainingFailed(reason: "No model available for training")
-        }
-
-        isTraining = true
-        defer { isTraining = false }
-
-        if configuration.enableLogging {
-            logger.info("Starting incremental training with \(self.trainingBuffer.count) samples")
-        }
-
-        let startTime = Date()
-
-        // Create batch provider from buffer
-        let batchProvider = TrainingSampleBatchProvider(samples: trainingBuffer)
-
-        // Configure training (small updates for incremental learning)
-        let config = TrainingConfig(
-            epochs: 1, // Single epoch for incremental updates
-            batchSize: min(trainingBuffer.count, 32),
-            learningRate: 0.0001 // Small learning rate for fine-tuning
-        )
-
-        // Train the model
-        let result = try await trainer.train(
-            model: model,
-            dataProvider: { batchProvider },
-            config: config
-        )
-
-        // Save personalized model
-        try await savePersonalizedModel()
-
-        // Record training session
-        let session = TrainingSession(
-            timestamp: Date(),
-            sampleCount: trainingBuffer.count,
-            trainingTime: Date().timeIntervalSince(startTime),
-            loss: result.loss,
-            accuracy: result.accuracy
-        )
-        trainingHistory.append(session)
-
-        // Clear buffer after successful training
-        trainingBuffer.removeAll()
-        lastTrainingDate = Date()
-
-        if configuration.enableLogging {
-            logger.info("Incremental training completed in \(String(format: "%.2f", session.trainingTime))s")
-        }
-
-        // Check if we should upload updates (only in FEDERATED mode)
-        // Aggregated upload will be implemented in a future version
-        if trainingMode.uploadsToServer && trainingHistory.count >= uploadThreshold && configuration.enableLogging {
-            logger.info("Upload threshold reached (\(self.trainingHistory.count) sessions) - mode: \(self.trainingMode.rawValue)")
-        }
-    }
-
-    /// Forces training on current buffer, regardless of thresholds.
-    public func forceTraining() async throws {
-        guard !trainingBuffer.isEmpty else {
-            throw EdgeMLError.trainingFailed(reason: "No training samples in buffer")
-        }
-
-        try await trainIncrementally()
-    }
-
-    // MARK: - Statistics
+extension PersonalizationManager {
 
     /// Gets statistics about personalization progress.
     public func getStatistics() -> PersonalizationStatistics {
@@ -301,8 +175,11 @@ public actor PersonalizationManager {
             logger.info("Training buffer cleared")
         }
     }
+}
 
-    // MARK: - Ditto Configuration
+// MARK: - Ditto & FedPer Configuration
+
+extension PersonalizationManager {
 
     /// Configures Ditto mode with the given lambda regularization strength.
     /// - Parameter lambda: Regularization coefficient (higher = personal model stays closer to global).
@@ -335,8 +212,6 @@ public actor PersonalizationManager {
         }
     }
 
-    // MARK: - FedPer Configuration
-
     /// Configures FedPer mode by specifying which layers are personalized (head).
     /// - Parameter layers: Set of layer names that form the personalized "head".
     public func configurePersonalizedLayers(_ layers: [String]) {
@@ -351,8 +226,6 @@ public actor PersonalizationManager {
     public func getPersonalizedLayerNames() -> Set<String> {
         return personalizedLayers
     }
-
-    // MARK: - Server Personalization
 
     /// Applies personalized model state received from the server.
     /// - Parameter response: Personalized model response from GET /api/v1/training/personalized/{device_id}.
@@ -370,137 +243,35 @@ public actor PersonalizationManager {
         }
 
         if configuration.enableLogging {
-            logger.info("Applied server personalization state (strategy: \(response.strategy ?? "unknown"))")
+            let strategy = response.strategy ?? "unknown"
+            logger.info(
+                "Applied server personalization state (strategy: \(strategy))"
+            )
         }
     }
+}
 
-    // MARK: - Private Methods
+// MARK: - Private Helpers
 
-    private func shouldTriggerTraining() -> Bool {
-        // Check buffer size threshold
-        guard trainingBuffer.count >= bufferSizeThreshold else {
-            return false
-        }
+extension PersonalizationManager {
 
-        // Check minimum samples
-        guard trainingBuffer.count >= minSamplesForTraining else {
-            return false
-        }
-
-        // Check training interval
-        if let lastDate = lastTrainingDate {
-            let timeSinceLastTraining = Date().timeIntervalSince(lastDate)
-            guard timeSinceLastTraining >= trainingInterval else {
-                return false
-            }
-        }
-
-        // Don't trigger if already training
-        guard !isTraining else {
-            return false
-        }
-
-        return true
-    }
-
-    private func getPersonalizedModelURL(for modelId: String) -> URL? {
+    func getPersonalizedModelURL(for modelId: String) -> URL? {
         let fileManager = FileManager.default
-        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+        guard let documentsURL = fileManager.urls(
+            for: .documentDirectory, in: .userDomainMask
+        ).first else {
             return nil
         }
 
-        let modelsDirectory = documentsURL.appendingPathComponent("EdgeML/PersonalizedModels")
-        try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
-
-        return modelsDirectory.appendingPathComponent("\(modelId)-personalized.mlmodelc")
-    }
-
-    private func savePersonalizedModel() async throws {
-        guard let model = baseModel else {
-            throw EdgeMLError.trainingFailed(reason: "No base model loaded")
-        }
-
-        guard let personalizedURL = getPersonalizedModelURL(for: model.id) else {
-            throw EdgeMLError.trainingFailed(reason: "Could not determine personalized model URL")
-        }
-
-        // The trained model is now stored in the trainer's context
-        // We need to save it to the personalized model URL
-        // This is a placeholder - actual implementation depends on CoreML's APIs
-
-        let mlModel = try MLModel(contentsOf: model.compiledModelURL)
-        let metadata = model.metadata
-        personalizedModel = EdgeMLModel(
-            id: model.id,
-            version: "\(model.version)-personalized",
-            mlModel: mlModel,
-            metadata: metadata,
-            compiledModelURL: personalizedURL
+        let modelsDirectory = documentsURL.appendingPathComponent(
+            "EdgeML/PersonalizedModels"
+        )
+        try? fileManager.createDirectory(
+            at: modelsDirectory, withIntermediateDirectories: true
         )
 
-        if configuration.enableLogging {
-            logger.info("Saved personalized model to \(personalizedURL.path)")
-        }
-    }
-}
-
-// MARK: - Supporting Types
-
-/// Represents a single training sample with metadata.
-public struct TrainingSample {
-    public let input: MLFeatureProvider
-    public let target: MLFeatureProvider
-    public let timestamp: Date
-    public let metadata: [String: Any]?
-}
-
-/// Batch provider for training samples.
-private class TrainingSampleBatchProvider: NSObject, MLBatchProvider {
-    let samples: [TrainingSample]
-
-    init(samples: [TrainingSample]) {
-        self.samples = samples
-    }
-
-    var count: Int {
-        return samples.count
-    }
-
-    func features(at index: Int) -> MLFeatureProvider {
-        return samples[index].input
-    }
-}
-
-/// Record of a training session.
-public struct TrainingSession: Codable {
-    public let timestamp: Date
-    public let sampleCount: Int
-    public let trainingTime: TimeInterval
-    public let loss: Double?
-    public let accuracy: Double?
-}
-
-/// Statistics about personalization progress.
-public struct PersonalizationStatistics {
-    public let totalTrainingSessions: Int
-    public let totalSamplesTrained: Int
-    public let bufferedSamples: Int
-    public let lastTrainingDate: Date?
-    public let averageLoss: Double?
-    public let averageAccuracy: Double?
-    public let isPersonalized: Bool
-    public let trainingMode: TrainingMode
-    /// Whether a separate global model is maintained (Ditto mode).
-    public let hasGlobalModel: Bool
-    /// Number of personalized layers (FedPer mode).
-    public let personalizedLayerCount: Int
-}
-
-// MARK: - Array Extension
-
-private extension Array where Element == Double {
-    func average() -> Double? {
-        guard !isEmpty else { return nil }
-        return reduce(0, +) / Double(count)
+        return modelsDirectory.appendingPathComponent(
+            "\(modelId)-personalized.mlmodelc"
+        )
     }
 }
