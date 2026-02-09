@@ -145,19 +145,30 @@ public final class NetworkMonitor: @unchecked Sendable {
             // Add handler
             lock.lock()
             handlers[token] = { [weak self] isConnected in
-                guard let self = self else { return }
-
-                if isConnected {
-                    Task {
-                        if await resumeTracker.tryResume() {
-                            timeoutTask.cancel()
-                            self.removeHandler(token)
-                            continuation.resume(returning: true)
-                        }
-                    }
-                }
+                guard let self, isConnected else { return }
+                self.handleConnectivityRestored(
+                    resumeTracker: resumeTracker,
+                    timeoutTask: timeoutTask,
+                    token: token,
+                    continuation: continuation
+                )
             }
             lock.unlock()
+        }
+    }
+
+    private func handleConnectivityRestored(
+        resumeTracker: ResumeTracker,
+        timeoutTask: Task<Void, Never>,
+        token: UUID,
+        continuation: CheckedContinuation<Bool, Never>
+    ) {
+        Task {
+            if await resumeTracker.tryResume() {
+                timeoutTask.cancel()
+                self.removeHandler(token)
+                continuation.resume(returning: true)
+            }
         }
     }
 }

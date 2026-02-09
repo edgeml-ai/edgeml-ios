@@ -27,7 +27,7 @@ public final class AudioEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input _: Any, modality _: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
         let sampleRate = self.sampleRate
         let totalFrames = Int(durationSeconds * Double(sampleRate) / 1024)
 

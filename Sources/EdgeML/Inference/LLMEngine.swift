@@ -29,7 +29,7 @@ public final class LLMEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input: Any, modality _: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
         let prompt: String
         if let str = input as? String {
             prompt = str
@@ -83,9 +83,9 @@ public final class LLMEngine: StreamingInferenceEngine, @unchecked Sendable {
     /// Generate tokens using mlx-swift (or a placeholder implementation).
     private static func generateTokens(
         prompt: String,
-        modelPath: URL,
+        modelPath _: URL,
         maxTokens: Int,
-        temperature: Double
+        temperature _: Double
     ) async throws -> [String] {
         // In production this would use `import MLX` and `import MLXLLM`.
         // For now, return a placeholder stream demonstrating the interface.

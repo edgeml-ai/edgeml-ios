@@ -413,12 +413,15 @@ public final class EdgeMLClient: @unchecked Sendable {
         // Report generation_started
         if let deviceId = deviceId {
             Task {
-                let event = InferenceEventRequest(
+                let ctx = InferenceEventContext(
                     deviceId: deviceId,
                     modelId: model.id,
                     version: model.version,
                     modality: modality.rawValue,
-                    sessionId: sessionId,
+                    sessionId: sessionId
+                )
+                let event = InferenceEventRequest(
+                    context: ctx,
                     eventType: "generation_started",
                     timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
                     orgId: orgId
@@ -452,12 +455,15 @@ public final class EdgeMLClient: @unchecked Sendable {
                         totalDurationMs: result.totalDurationMs,
                         throughput: result.throughput
                     )
-                    let event = InferenceEventRequest(
+                    let ctx = InferenceEventContext(
                         deviceId: deviceId,
                         modelId: model.id,
                         version: model.version,
                         modality: modality.rawValue,
-                        sessionId: sessionId,
+                        sessionId: sessionId
+                    )
+                    let event = InferenceEventRequest(
+                        context: ctx,
                         eventType: failed ? "generation_failed" : "generation_completed",
                         timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
                         metrics: metrics,
