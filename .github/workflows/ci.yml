@@ -18,11 +18,11 @@ jobs:
 
       - name: Build
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 16' build
+          xcodebuild -scheme EdgeML -destination 'platform=macOS' build
 
       - name: Run tests with coverage
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 16' -enableCodeCoverage YES -resultBundlePath TestResults test
+          xcodebuild -scheme EdgeML -destination 'platform=macOS' -enableCodeCoverage YES -resultBundlePath TestResults test
 
       - name: Generate coverage report
         run: |
@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 16' -enableCodeCoverage YES -resultBundlePath TestResults test
+          xcodebuild -scheme EdgeML -destination 'platform=macOS' -enableCodeCoverage YES -resultBundlePath TestResults test
 
       - name: Generate coverage report for SonarCloud
         run: |
