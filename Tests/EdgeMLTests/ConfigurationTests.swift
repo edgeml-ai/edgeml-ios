@@ -6,7 +6,7 @@ final class ConfigurationTests: XCTestCase {
     // MARK: - Default Configuration Tests
 
     func testDefaultConfiguration() {
-        let config = EdgeMLConfiguration.default
+        let config = EdgeMLConfiguration.standard
 
         XCTAssertEqual(config.maxRetryAttempts, 3)
         XCTAssertEqual(config.requestTimeout, 30)
@@ -72,7 +72,7 @@ final class ConfigurationTests: XCTestCase {
     // MARK: - Background Constraints Tests
 
     func testDefaultBackgroundConstraints() {
-        let constraints = BackgroundConstraints.default
+        let constraints = BackgroundConstraints.standard
 
         XCTAssertTrue(constraints.requiresWiFi)
         XCTAssertTrue(constraints.requiresCharging)

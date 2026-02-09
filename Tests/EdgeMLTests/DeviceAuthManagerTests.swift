@@ -3,6 +3,8 @@ import XCTest
 @testable import EdgeML
 
 final class DeviceAuthManagerTests: XCTestCase {
+    private static let testBaseURL = URL(string: "https://api.example.com")!
+
     override func setUp() {
         super.setUp()
         MockURLProtocol.responses = []
@@ -207,7 +209,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let deviceIdentifier = "device-\(unique)"
         return (
             DeviceAuthManager(
-            baseURL: URL(string: "https://api.example.com")!,
+            baseURL: Self.testBaseURL,
             orgId: orgId,
             deviceIdentifier: deviceIdentifier,
             keychainService: "ai.edgeml.tests.\(unique)"
@@ -248,7 +250,7 @@ private final class MockURLProtocol: URLProtocol {
     static var requests: [URLRequest] = []
 
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "api.example.com"
+        request.url?.host == DeviceAuthManagerTests.testBaseURL.host
     }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
@@ -294,7 +296,9 @@ private final class MockURLProtocol: URLProtocol {
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        // No cleanup needed — mock responses are consumed synchronously in startLoading()
+    }
 }
 
 private extension Array {

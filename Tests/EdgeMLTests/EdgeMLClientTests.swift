@@ -3,13 +3,15 @@ import XCTest
 
 final class EdgeMLClientTests: XCTestCase {
 
+    private static let testServerURL = URL(string: "https://api.example.com")!
+
     // MARK: - Initialization Tests
 
     func testClientInitialization() {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!
+            serverURL: Self.testServerURL
         )
 
         XCTAssertNotNil(client)
@@ -27,7 +29,7 @@ final class EdgeMLClientTests: XCTestCase {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!,
+            serverURL: Self.testServerURL,
             configuration: config
         )
 
@@ -38,7 +40,7 @@ final class EdgeMLClientTests: XCTestCase {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!
+            serverURL: Self.testServerURL
         )
 
         // The last created client becomes the shared instance
@@ -52,7 +54,7 @@ final class EdgeMLClientTests: XCTestCase {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!
+            serverURL: Self.testServerURL
         )
 
         XCTAssertFalse(client.isRegistered)
@@ -77,7 +79,7 @@ final class EdgeMLClientTests: XCTestCase {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!
+            serverURL: Self.testServerURL
         )
 
         let model = client.getCachedModel(modelId: "nonexistent-model")
@@ -88,7 +90,7 @@ final class EdgeMLClientTests: XCTestCase {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!
+            serverURL: Self.testServerURL
         )
 
         let model = client.getCachedModel(modelId: "nonexistent-model", version: "1.0.0")
@@ -101,7 +103,7 @@ final class EdgeMLClientTests: XCTestCase {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
             orgId: "org-test",
-            serverURL: URL(string: "https://api.example.com")!
+            serverURL: Self.testServerURL
         )
 
         // This should not crash
@@ -121,7 +123,7 @@ final class EdgeMLClientTests: XCTestCase {
 class MockBatchProvider: MLBatchProvider {
     var count: Int { return 0 }
 
-    func features(at index: Int) -> MLFeatureProvider {
+    func features(at _: Int) -> MLFeatureProvider {
         fatalError("Not implemented for tests")
     }
 }

@@ -126,7 +126,7 @@ actor WeightExtractor {
     }
 
     /// Extracts parameter keys from the model description.
-    private func extractParameterKeys(from description: MLModelDescription) -> [String] {
+    private func extractParameterKeys(from _: MLModelDescription) -> [String] {
         var keys: [String] = []
 
         // CoreML updatable models expose parameter descriptions
@@ -152,7 +152,7 @@ actor WeightExtractor {
     }
 
     /// Extracts a specific parameter from the model.
-    private func extractParameter(from model: MLModel, key: String) throws -> MLMultiArray {
+    private func extractParameter(from _: MLModel, key _: String) throws -> MLMultiArray {
         // In CoreML 5+, you can access parameters through the MLModel API
         // However, this requires the model to expose these parameters
 

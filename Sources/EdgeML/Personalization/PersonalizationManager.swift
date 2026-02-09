@@ -78,27 +78,25 @@ public actor PersonalizationManager {
         self.baseModel = model
 
         // Check if a personalized version exists
-        if let personalizedURL = getPersonalizedModelURL(for: model.id) {
-            // Load personalized model
-            if FileManager.default.fileExists(atPath: personalizedURL.path) {
-                do {
-                    let mlModel = try MLModel(contentsOf: personalizedURL)
-                    let metadata = model.metadata // Reuse base model metadata
-                    self.personalizedModel = EdgeMLModel(
-                        id: model.id,
-                        version: "\(model.version)-personalized",
-                        mlModel: mlModel,
-                        metadata: metadata,
-                        compiledModelURL: personalizedURL
-                    )
+        if let personalizedURL = getPersonalizedModelURL(for: model.id),
+           FileManager.default.fileExists(atPath: personalizedURL.path) {
+            do {
+                let mlModel = try MLModel(contentsOf: personalizedURL)
+                let metadata = model.metadata // Reuse base model metadata
+                self.personalizedModel = EdgeMLModel(
+                    id: model.id,
+                    version: "\(model.version)-personalized",
+                    mlModel: mlModel,
+                    metadata: metadata,
+                    compiledModelURL: personalizedURL
+                )
 
-                    if configuration.enableLogging {
-                        logger.info("Loaded personalized model for \(model.id)")
-                    }
-                } catch {
-                    if configuration.enableLogging {
-                        logger.error("Failed to load personalized model: \(error.localizedDescription)")
-                    }
+                if configuration.enableLogging {
+                    logger.info("Loaded personalized model for \(model.id)")
+                }
+            } catch {
+                if configuration.enableLogging {
+                    logger.error("Failed to load personalized model: \(error.localizedDescription)")
                 }
             }
         }
@@ -248,11 +246,9 @@ public actor PersonalizationManager {
         }
 
         // Check if we should upload updates (only in FEDERATED mode)
-        if trainingMode.uploadsToServer && trainingHistory.count >= uploadThreshold {
-            // TODO: Trigger upload of aggregated updates
-            if configuration.enableLogging {
-                logger.info("Upload threshold reached (\(self.trainingHistory.count) sessions) - mode: \(self.trainingMode.rawValue)")
-            }
+        // Aggregated upload will be implemented in a future version
+        if trainingMode.uploadsToServer && trainingHistory.count >= uploadThreshold && configuration.enableLogging {
+            logger.info("Upload threshold reached (\(self.trainingHistory.count) sessions) - mode: \(self.trainingMode.rawValue)")
         }
     }
 

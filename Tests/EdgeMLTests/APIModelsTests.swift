@@ -132,7 +132,7 @@ final class APIModelsTests: XCTestCase {
     // MARK: - Training Config Tests
 
     func testTrainingConfigDefaults() {
-        let config = TrainingConfig.default
+        let config = TrainingConfig.standard
 
         XCTAssertEqual(config.epochs, 1)
         XCTAssertEqual(config.batchSize, 32)
