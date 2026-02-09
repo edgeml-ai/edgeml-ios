@@ -98,6 +98,71 @@ final class EdgeMLClientTests: XCTestCase {
         XCTAssertNil(model)
     }
 
+    // MARK: - Server URL Tests
+
+    func testDefaultServerHost() {
+        XCTAssertEqual(EdgeMLClient.defaultServerHost, "api.edgeml.ai")
+    }
+
+    func testDefaultServerURL() {
+        let url = EdgeMLClient.defaultServerURL
+        XCTAssertEqual(url.scheme, "https")
+        XCTAssertEqual(url.host, "api.edgeml.ai")
+    }
+
+    func testClientUsesDefaultServerURLWhenNotSpecified() {
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test"
+        )
+
+        XCTAssertNotNil(client)
+    }
+
+    func testClientUsesCustomServerURL() {
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
+            serverURL: Self.testServerURL
+        )
+
+        XCTAssertNotNil(client)
+    }
+
+    // MARK: - Device ID Tests
+
+    func testCurrentDeviceIdNilBeforeRegistration() {
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
+            serverURL: Self.testServerURL
+        )
+
+        XCTAssertNil(client.deviceId)
+    }
+
+    func testDeviceIdentifierNilBeforeRegistration() {
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
+            serverURL: Self.testServerURL
+        )
+
+        XCTAssertNil(client.deviceIdentifier)
+    }
+
+    // MARK: - Org ID Tests
+
+    func testOrgIdIsStored() {
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "my-org-123",
+            serverURL: Self.testServerURL
+        )
+
+        XCTAssertEqual(client.orgId, "my-org-123")
+    }
+
     // MARK: - Background Training Tests
 
     func testBackgroundTrainingConfiguration() {

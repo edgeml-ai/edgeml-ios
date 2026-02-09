@@ -112,4 +112,186 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertTrue(EdgeMLConfiguration.LogLevel.info.rawValue < EdgeMLConfiguration.LogLevel.debug.rawValue)
         XCTAssertTrue(EdgeMLConfiguration.LogLevel.debug.rawValue < EdgeMLConfiguration.LogLevel.verbose.rawValue)
     }
+
+    // MARK: - Sub-Struct Tests
+
+    func testNetworkPolicyDefaults() {
+        let policy = EdgeMLConfiguration.NetworkPolicy()
+
+        XCTAssertEqual(policy.maxRetryAttempts, 3)
+        XCTAssertEqual(policy.requestTimeout, 30)
+        XCTAssertEqual(policy.downloadTimeout, 300)
+        XCTAssertFalse(policy.requireWiFiForDownload)
+    }
+
+    func testNetworkPolicyCustomValues() {
+        let policy = EdgeMLConfiguration.NetworkPolicy(
+            maxRetryAttempts: 10,
+            requestTimeout: 120,
+            downloadTimeout: 900,
+            requireWiFiForDownload: true
+        )
+
+        XCTAssertEqual(policy.maxRetryAttempts, 10)
+        XCTAssertEqual(policy.requestTimeout, 120)
+        XCTAssertEqual(policy.downloadTimeout, 900)
+        XCTAssertTrue(policy.requireWiFiForDownload)
+    }
+
+    func testLoggingPolicyDefaults() {
+        let policy = EdgeMLConfiguration.LoggingPolicy()
+
+        XCTAssertFalse(policy.enableLogging)
+        XCTAssertEqual(policy.logLevel, .info)
+    }
+
+    func testLoggingPolicyCustomValues() {
+        let policy = EdgeMLConfiguration.LoggingPolicy(
+            enableLogging: true,
+            logLevel: .verbose
+        )
+
+        XCTAssertTrue(policy.enableLogging)
+        XCTAssertEqual(policy.logLevel, .verbose)
+    }
+
+    func testTrainingPolicyDefaults() {
+        let policy = EdgeMLConfiguration.TrainingPolicy()
+
+        XCTAssertTrue(policy.requireChargingForTraining)
+        XCTAssertEqual(policy.minimumBatteryLevel, 0.2)
+    }
+
+    func testTrainingPolicyCustomValues() {
+        let policy = EdgeMLConfiguration.TrainingPolicy(
+            requireChargingForTraining: false,
+            minimumBatteryLevel: 0.5
+        )
+
+        XCTAssertFalse(policy.requireChargingForTraining)
+        XCTAssertEqual(policy.minimumBatteryLevel, 0.5)
+    }
+
+    // MARK: - Structured Init Tests
+
+    func testStructuredInit() {
+        let config = EdgeMLConfiguration(
+            network: .init(maxRetryAttempts: 7, requestTimeout: 90, downloadTimeout: 450, requireWiFiForDownload: true),
+            logging: .init(enableLogging: true, logLevel: .warning),
+            maxCacheSize: 256 * 1024 * 1024,
+            autoCheckUpdates: false,
+            updateCheckInterval: 1800,
+            training: .init(requireChargingForTraining: false, minimumBatteryLevel: 0.4),
+            privacyConfiguration: .highPrivacy
+        )
+
+        XCTAssertEqual(config.network.maxRetryAttempts, 7)
+        XCTAssertEqual(config.network.requestTimeout, 90)
+        XCTAssertEqual(config.network.downloadTimeout, 450)
+        XCTAssertTrue(config.network.requireWiFiForDownload)
+        XCTAssertTrue(config.logging.enableLogging)
+        XCTAssertEqual(config.logging.logLevel, .warning)
+        XCTAssertEqual(config.maxCacheSize, 256 * 1024 * 1024)
+        XCTAssertFalse(config.autoCheckUpdates)
+        XCTAssertEqual(config.updateCheckInterval, 1800)
+        XCTAssertFalse(config.training.requireChargingForTraining)
+        XCTAssertEqual(config.training.minimumBatteryLevel, 0.4)
+        XCTAssertTrue(config.privacyConfiguration.enableDifferentialPrivacy)
+    }
+
+    // MARK: - Backward-Compatible Accessor Tests
+
+    func testBackwardCompatibleAccessorsMatchSubStructs() {
+        let config = EdgeMLConfiguration(
+            network: .init(maxRetryAttempts: 8, requestTimeout: 45, downloadTimeout: 500, requireWiFiForDownload: true),
+            logging: .init(enableLogging: true, logLevel: .debug),
+            training: .init(requireChargingForTraining: false, minimumBatteryLevel: 0.35)
+        )
+
+        XCTAssertEqual(config.maxRetryAttempts, config.network.maxRetryAttempts)
+        XCTAssertEqual(config.requestTimeout, config.network.requestTimeout)
+        XCTAssertEqual(config.downloadTimeout, config.network.downloadTimeout)
+        XCTAssertEqual(config.requireWiFiForDownload, config.network.requireWiFiForDownload)
+        XCTAssertEqual(config.enableLogging, config.logging.enableLogging)
+        XCTAssertEqual(config.logLevel, config.logging.logLevel)
+        XCTAssertEqual(config.requireChargingForTraining, config.training.requireChargingForTraining)
+        XCTAssertEqual(config.minimumBatteryLevel, config.training.minimumBatteryLevel)
+    }
+
+    // MARK: - Flat Convenience Init Equivalence
+
+    func testFlatInitMatchesStructuredInit() {
+        let flat = EdgeMLConfiguration(
+            maxRetryAttempts: 4,
+            requestTimeout: 60,
+            downloadTimeout: 400,
+            enableLogging: true,
+            logLevel: .warning,
+            maxCacheSize: 300 * 1024 * 1024,
+            autoCheckUpdates: false,
+            updateCheckInterval: 7200,
+            requireWiFiForDownload: true,
+            requireChargingForTraining: false,
+            minimumBatteryLevel: 0.15
+        )
+
+        let structured = EdgeMLConfiguration(
+            network: .init(maxRetryAttempts: 4, requestTimeout: 60, downloadTimeout: 400, requireWiFiForDownload: true),
+            logging: .init(enableLogging: true, logLevel: .warning),
+            maxCacheSize: 300 * 1024 * 1024,
+            autoCheckUpdates: false,
+            updateCheckInterval: 7200,
+            training: .init(requireChargingForTraining: false, minimumBatteryLevel: 0.15)
+        )
+
+        XCTAssertEqual(flat.maxRetryAttempts, structured.maxRetryAttempts)
+        XCTAssertEqual(flat.requestTimeout, structured.requestTimeout)
+        XCTAssertEqual(flat.downloadTimeout, structured.downloadTimeout)
+        XCTAssertEqual(flat.enableLogging, structured.enableLogging)
+        XCTAssertEqual(flat.logLevel, structured.logLevel)
+        XCTAssertEqual(flat.maxCacheSize, structured.maxCacheSize)
+        XCTAssertEqual(flat.autoCheckUpdates, structured.autoCheckUpdates)
+        XCTAssertEqual(flat.updateCheckInterval, structured.updateCheckInterval)
+        XCTAssertEqual(flat.requireWiFiForDownload, structured.requireWiFiForDownload)
+        XCTAssertEqual(flat.requireChargingForTraining, structured.requireChargingForTraining)
+        XCTAssertEqual(flat.minimumBatteryLevel, structured.minimumBatteryLevel)
+    }
+
+    // MARK: - Preset Semantics
+
+    func testDevelopmentIsMorePermissiveThanProduction() {
+        let dev = EdgeMLConfiguration.development
+        let prod = EdgeMLConfiguration.production
+
+        XCTAssertLessThan(dev.maxRetryAttempts, prod.maxRetryAttempts)
+        XCTAssertFalse(dev.requireWiFiForDownload)
+        XCTAssertTrue(prod.requireWiFiForDownload)
+        XCTAssertFalse(dev.requireChargingForTraining)
+        XCTAssertTrue(prod.requireChargingForTraining)
+        XCTAssertLessThan(dev.minimumBatteryLevel, prod.minimumBatteryLevel)
+    }
+
+    func testDevelopmentHasLoggingEnabled() {
+        XCTAssertTrue(EdgeMLConfiguration.development.enableLogging)
+        XCTAssertEqual(EdgeMLConfiguration.development.logLevel, .debug)
+    }
+
+    func testProductionHasLoggingDisabled() {
+        XCTAssertFalse(EdgeMLConfiguration.production.enableLogging)
+        XCTAssertEqual(EdgeMLConfiguration.production.logLevel, .error)
+    }
+
+    func testProductionChecksUpdatesLessFrequently() {
+        let dev = EdgeMLConfiguration.development
+        let prod = EdgeMLConfiguration.production
+
+        XCTAssertGreaterThan(prod.updateCheckInterval, dev.updateCheckInterval)
+    }
+
+    func testProductionHasSmallerCache() {
+        let dev = EdgeMLConfiguration.development
+        let prod = EdgeMLConfiguration.production
+
+        XCTAssertGreaterThan(dev.maxCacheSize, prod.maxCacheSize)
+    }
 }
