@@ -388,8 +388,8 @@ public final class EdgeMLClient: @unchecked Sendable {
     }
 
     /// Clears all cached models.
-    public func clearCache() throws {
-        try modelManager.clearCache()
+    public func clearCache() async throws {
+        try await modelManager.clearCache()
 
         if configuration.enableLogging {
             logger.info("Model cache cleared")
@@ -692,7 +692,12 @@ public final class EdgeMLClient: @unchecked Sendable {
         // Get locale info
         let currentLocale = Locale.current
         let locale = currentLocale.identifier
-        let region = currentLocale.region?.identifier
+        let region: String?
+        if #available(iOS 16, macOS 13, *) {
+            region = currentLocale.region?.identifier
+        } else {
+            region = currentLocale.regionCode
+        }
         let timezone = TimeZone.current.identifier
 
         return LocalDeviceInfo(

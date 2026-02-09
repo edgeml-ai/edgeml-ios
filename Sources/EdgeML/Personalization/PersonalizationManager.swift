@@ -110,7 +110,7 @@ public actor PersonalizationManager {
     /// Resets personalization by deleting the personalized model.
     public func resetPersonalization() throws {
         guard let model = baseModel else {
-            throw EdgeMLError.modelNotFound(reason: "No base model loaded")
+            throw EdgeMLError.trainingFailed(reason: "No base model loaded")
         }
 
         if let personalizedURL = getPersonalizedModelURL(for: model.id) {
@@ -189,13 +189,13 @@ public actor PersonalizationManager {
 
         guard trainingBuffer.count >= minSamplesForTraining else {
             if configuration.enableLogging {
-                logger.debug("Not enough samples for training (\(trainingBuffer.count) < \(minSamplesForTraining))")
+                logger.debug("Not enough samples for training (\(self.trainingBuffer.count) < \(self.minSamplesForTraining))")
             }
             return
         }
 
         guard let model = getCurrentModel() else {
-            throw EdgeMLError.modelNotFound
+            throw EdgeMLError.trainingFailed(reason: "No model available for training")
         }
 
         isTraining = true
@@ -334,7 +334,7 @@ public actor PersonalizationManager {
 
     private func savePersonalizedModel() async throws {
         guard let model = baseModel else {
-            throw EdgeMLError.modelNotFound(reason: "No base model loaded")
+            throw EdgeMLError.trainingFailed(reason: "No base model loaded")
         }
 
         guard let personalizedURL = getPersonalizedModelURL(for: model.id) else {

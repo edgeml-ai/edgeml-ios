@@ -195,14 +195,6 @@ public actor FederatedTrainer {
                     }
                 )
 
-                // Add progress handler
-                updateTask.progressHandlers.add { contextProgress in
-                    let progress = contextProgress.progress
-                    if self.configuration.enableLogging {
-                        self.logger.debug("Training progress: \(Int(progress.fractionCompleted * 100))%")
-                    }
-                }
-
                 // Start training
                 updateTask.resume()
 

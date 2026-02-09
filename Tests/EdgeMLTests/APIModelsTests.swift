@@ -8,11 +8,10 @@ final class APIModelsTests: XCTestCase {
     func testDeviceCapabilitiesEncoding() throws {
         let capabilities = DeviceCapabilities(
             supportsTraining: true,
-            coreMLVersion: "5.0",
-            osVersion: "17.0",
-            deviceModel: "iPhone15,2",
-            availableStorage: 1024 * 1024 * 1024,
-            hasNeuralEngine: true
+            coremlVersion: "5.0",
+            hasNeuralEngine: true,
+            maxBatchSize: 32,
+            supportedFormats: ["coreml", "onnx"]
         )
 
         let encoder = JSONEncoder()
@@ -21,46 +20,29 @@ final class APIModelsTests: XCTestCase {
 
         XCTAssertEqual(json["supports_training"] as? Bool, true)
         XCTAssertEqual(json["coreml_version"] as? String, "5.0")
-        XCTAssertEqual(json["os_version"] as? String, "17.0")
-        XCTAssertEqual(json["device_model"] as? String, "iPhone15,2")
-        XCTAssertEqual(json["available_storage"] as? UInt64, 1024 * 1024 * 1024)
         XCTAssertEqual(json["has_neural_engine"] as? Bool, true)
+        XCTAssertEqual(json["max_batch_size"] as? Int, 32)
+        XCTAssertEqual(json["supported_formats"] as? [String], ["coreml", "onnx"])
     }
 
-    func testDeviceRegistrationRequestEncoding() throws {
-        let capabilities = DeviceCapabilities(
-            supportsTraining: true,
-            coreMLVersion: "5.0",
-            osVersion: "17.0",
-            deviceModel: "iPhone15,2",
-            availableStorage: 1024 * 1024 * 1024,
-            hasNeuralEngine: true
-        )
+    func testDeviceCapabilitiesDefaults() {
+        let capabilities = DeviceCapabilities()
 
-        let request = DeviceRegistrationRequest(
-            deviceId: "test-device-123",
-            metadata: ["app_version": "1.0.0"],
-            capabilities: capabilities,
-            platform: "ios"
-        )
-
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(request)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-
-        XCTAssertEqual(json["device_id"] as? String, "test-device-123")
-        XCTAssertEqual(json["platform"] as? String, "ios")
-        XCTAssertNotNil(json["capabilities"])
-        XCTAssertNotNil(json["metadata"])
+        XCTAssertTrue(capabilities.supportsTraining)
+        XCTAssertNil(capabilities.coremlVersion)
+        XCTAssertFalse(capabilities.hasNeuralEngine)
+        XCTAssertNil(capabilities.maxBatchSize)
+        XCTAssertNil(capabilities.supportedFormats)
     }
 
-    func testDeviceRegistrationDecoding() throws {
+    func testDeviceRegistrationResponseDecoding() throws {
         let json = """
         {
-            "device_id": "abc-123",
-            "token": "secret-token",
-            "registered_at": "2024-01-15T10:30:00Z",
-            "bucket": 42
+            "id": "uuid-abc-123",
+            "device_identifier": "idfv-xyz",
+            "org_id": "org-42",
+            "status": "active",
+            "registered_at": "2024-01-15T10:30:00Z"
         }
         """
 
@@ -69,9 +51,11 @@ final class APIModelsTests: XCTestCase {
 
         let registration = try decoder.decode(DeviceRegistrationResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(registration.deviceId, "abc-123")
-        XCTAssertEqual(registration.token, "secret-token")
-        XCTAssertEqual(registration.bucket, 42)
+        XCTAssertEqual(registration.id, "uuid-abc-123")
+        XCTAssertEqual(registration.deviceIdentifier, "idfv-xyz")
+        XCTAssertEqual(registration.orgId, "org-42")
+        XCTAssertEqual(registration.status, "active")
+        XCTAssertNotNil(registration.registeredAt)
     }
 
     // MARK: - Model Metadata Tests

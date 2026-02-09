@@ -109,7 +109,7 @@ public final class EdgeMLModel: @unchecked Sendable {
     /// - Returns: Batch of predictions.
     /// - Throws: Error if prediction fails.
     public func predict(batch inputBatch: MLBatchProvider) throws -> MLBatchProvider {
-        return try mlModel.predictions(from: inputBatch)
+        return try mlModel.predictions(from: inputBatch, options: MLPredictionOptions())
     }
 
     /// Makes a prediction with the model using a dictionary of inputs.

@@ -17,7 +17,7 @@ final class EdgeMLClientTests: XCTestCase {
 
         XCTAssertNotNil(client)
         XCTAssertFalse(client.isRegistered)
-        XCTAssertNil(client.currentDeviceId)
+        XCTAssertNil(client.deviceId)
     }
 
     func testClientInitializationWithConfiguration() {

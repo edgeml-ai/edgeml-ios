@@ -10,7 +10,7 @@ final class EdgeMLErrorTests: XCTestCase {
         XCTAssertTrue(EdgeMLError.networkUnavailable.errorDescription!.contains("Network"))
 
         XCTAssertNotNil(EdgeMLError.requestTimeout.errorDescription)
-        XCTAssertTrue(EdgeMLError.requestTimeout.errorDescription!.contains("timeout"))
+        XCTAssertTrue(EdgeMLError.requestTimeout.errorDescription!.contains("timed out"))
     }
 
     func testServerErrors() {

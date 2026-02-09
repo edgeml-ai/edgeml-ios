@@ -3,7 +3,7 @@ import XCTest
 @testable import EdgeML
 
 final class DeviceAuthManagerTests: XCTestCase {
-    private static let testHost = "api.example.com"
+    fileprivate static let testHost = "api.example.com"
     private static let testBaseURL = URL(string: "https://\(testHost)")!
 
     override func setUp() {
@@ -28,15 +28,15 @@ final class DeviceAuthManagerTests: XCTestCase {
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
             ),
-            .success(
+            .successJSON(
                 statusCode: 200,
                 json: tokenPayload(access: "acc_refresh", refresh: "ref_refresh", expiresAt: exp)
             ),
-            .success(statusCode: 204, body: Data()),
+            .successData(statusCode: 204, body: Data()),
         ]
 
         let bootstrapped = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
@@ -63,7 +63,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
             ),
@@ -94,15 +94,15 @@ final class DeviceAuthManagerTests: XCTestCase {
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
             ),
-            .success(
+            .successJSON(
                 statusCode: 200,
                 json: tokenPayload(access: "acc_refresh_1", refresh: "ref_refresh_1", expiresAt: exp)
             ),
-            .success(
+            .successJSON(
                 statusCode: 200,
                 json: tokenPayload(access: "acc_refresh_2", refresh: "ref_refresh_2", expiresAt: exp)
             ),
@@ -125,7 +125,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let exp = formatter.string(from: Date().addingTimeInterval(300))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
             ),
@@ -143,7 +143,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let expired = formatter.string(from: Date().addingTimeInterval(-60))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_expired", refresh: "ref_expired", expiresAt: expired)
             ),
@@ -166,7 +166,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let exp = formatter.string(from: Date().addingTimeInterval(3600))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
             ),
@@ -184,7 +184,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let exp = formatter.string(from: Date().addingTimeInterval(600))
 
         MockURLProtocol.responses = [
-            .success(
+            .successJSON(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
             ),
@@ -242,8 +242,8 @@ final class DeviceAuthManagerTests: XCTestCase {
 
 private final class MockURLProtocol: URLProtocol {
     enum MockResponse {
-        case success(statusCode: Int, json: [String: Any])
-        case success(statusCode: Int, body: Data)
+        case successJSON(statusCode: Int, json: [String: Any])
+        case successData(statusCode: Int, body: Data)
         case failure(Error)
     }
 
@@ -269,7 +269,7 @@ private final class MockURLProtocol: URLProtocol {
         switch next {
         case let .failure(error):
             client?.urlProtocol(self, didFailWithError: error)
-        case let .success(statusCode, json):
+        case .successJSON(statusCode: let statusCode, json: let json):
             do {
                 let data = try JSONSerialization.data(withJSONObject: json)
                 let response = HTTPURLResponse(
@@ -284,7 +284,7 @@ private final class MockURLProtocol: URLProtocol {
             } catch {
                 client?.urlProtocol(self, didFailWithError: error)
             }
-        case let .success(statusCode, body):
+        case .successData(statusCode: let statusCode, body: let body):
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: statusCode,
