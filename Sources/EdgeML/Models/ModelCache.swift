@@ -263,7 +263,8 @@ public final class ModelCache: @unchecked Sendable {
             options: [.skipsSubdirectoryDescendants]
         ) {
             for case let modelDir as URL in enumerator {
-                if let modDate = try? modelDir.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+                let resourceValues = try? modelDir.resourceValues(forKeys: [.contentModificationDateKey])
+                if let modDate = resourceValues?.contentModificationDate {
                     models.append((modelDir, modDate))
                 }
             }
@@ -288,16 +289,16 @@ public final class ModelCache: @unchecked Sendable {
         }
     }
 
-    private func compareVersions(_ v1: String, _ v2: String) -> Bool {
-        let parts1 = v1.split(separator: ".").compactMap { Int($0) }
-        let parts2 = v2.split(separator: ".").compactMap { Int($0) }
+    private func compareVersions(_ version1: String, _ version2: String) -> Bool {
+        let parts1 = version1.split(separator: ".").compactMap { Int($0) }
+        let parts2 = version2.split(separator: ".").compactMap { Int($0) }
 
-        for i in 0..<max(parts1.count, parts2.count) {
-            let p1 = i < parts1.count ? parts1[i] : 0
-            let p2 = i < parts2.count ? parts2[i] : 0
+        for index in 0..<max(parts1.count, parts2.count) {
+            let part1 = index < parts1.count ? parts1[index] : 0
+            let part2 = index < parts2.count ? parts2[index] : 0
 
-            if p1 < p2 { return true }
-            if p1 > p2 { return false }
+            if part1 < part2 { return true }
+            if part1 > part2 { return false }
         }
 
         return false

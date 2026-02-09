@@ -1,7 +1,10 @@
 import Foundation
-import BackgroundTasks
 import os.log
 import CoreML
+
+#if os(iOS)
+import BackgroundTasks
+#endif
 
 /// Manages background training operations using BackgroundTasks framework.
 public final class BackgroundSync: @unchecked Sendable {
@@ -41,19 +44,25 @@ public final class BackgroundSync: @unchecked Sendable {
     ///
     /// Call this method in your `application(_:didFinishLaunchingWithOptions:)`.
     public static func registerBackgroundTasks() {
+        #if os(iOS)
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: trainingTaskIdentifier,
             using: nil
         ) { task in
-            shared.handleTrainingTask(task as! BGProcessingTask)
+            guard let processingTask = task as? BGProcessingTask else { return }
+            shared.handleTrainingTask(processingTask)
         }
 
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: syncTaskIdentifier,
             using: nil
         ) { task in
-            shared.handleSyncTask(task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else { return }
+            shared.handleSyncTask(refreshTask)
         }
+        #else
+        shared.logger.warning("Background tasks are only available on iOS")
+        #endif
     }
 
     // MARK: - Configuration
@@ -85,6 +94,7 @@ public final class BackgroundSync: @unchecked Sendable {
 
     /// Schedules the next background training opportunity.
     public func scheduleNextTraining() {
+        #if os(iOS)
         lock.lock()
         guard isConfigured, let constraints = constraints else {
             lock.unlock()
@@ -105,10 +115,12 @@ public final class BackgroundSync: @unchecked Sendable {
         } catch {
             logger.error("Failed to schedule training: \(error.localizedDescription)")
         }
+        #endif
     }
 
     /// Schedules a model sync task.
     public func scheduleSync() {
+        #if os(iOS)
         let request = BGAppRefreshTaskRequest(identifier: Self.syncTaskIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 900) // 15 minutes
 
@@ -118,16 +130,20 @@ public final class BackgroundSync: @unchecked Sendable {
         } catch {
             logger.error("Failed to schedule sync: \(error.localizedDescription)")
         }
+        #endif
     }
 
     /// Cancels all scheduled training tasks.
     public func cancelScheduledTraining() {
+        #if os(iOS)
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.trainingTaskIdentifier)
         logger.info("Cancelled scheduled training tasks")
+        #endif
     }
 
     // MARK: - Task Handlers
 
+    #if os(iOS)
     private func handleTrainingTask(_ task: BGProcessingTask) {
         logger.info("Starting background training task")
 
@@ -188,7 +204,7 @@ public final class BackgroundSync: @unchecked Sendable {
         let syncTask = Task {
             do {
                 // Check for model updates
-                if let _ = try await client.checkForUpdates(modelId: modelId) {
+                if try await client.checkForUpdates(modelId: modelId) != nil {
                     // Download update
                     _ = try await client.downloadModel(modelId: modelId)
                     logger.info("Downloaded model update in background")
@@ -206,6 +222,7 @@ public final class BackgroundSync: @unchecked Sendable {
             syncTask.cancel()
         }
     }
+    #endif
 
     // MARK: - Status
 

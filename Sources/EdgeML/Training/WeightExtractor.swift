@@ -141,9 +141,9 @@ actor WeightExtractor {
         // This is a simplified approach - in production, you'd use the actual
         // model parameter descriptions from CoreML
         for prefix in commonLayerPrefixes {
-            for i in 0..<10 { // Assume up to 10 layers of each type
+            for layerIndex in 0..<10 { // Assume up to 10 layers of each type
                 for suffix in parameterSuffixes {
-                    keys.append("\(prefix)_\(i)\(suffix)")
+                    keys.append("\(prefix)_\(layerIndex)\(suffix)")
                 }
             }
         }
@@ -188,20 +188,20 @@ actor WeightExtractor {
     }
 
     /// Subtracts two MLMultiArrays element-wise.
-    private func subtractArrays(_ a: MLMultiArray, _ b: MLMultiArray) -> MLMultiArray? {
-        guard a.shape == b.shape else {
+    private func subtractArrays(_ updated: MLMultiArray, _ original: MLMultiArray) -> MLMultiArray? {
+        guard updated.shape == original.shape else {
             return nil
         }
 
-        let count = a.count
-        guard let result = try? MLMultiArray(shape: a.shape, dataType: a.dataType) else {
+        let count = updated.count
+        guard let result = try? MLMultiArray(shape: updated.shape, dataType: updated.dataType) else {
             return nil
         }
 
-        for i in 0..<count {
-            let aValue = a[i].doubleValue
-            let bValue = b[i].doubleValue
-            result[i] = NSNumber(value: aValue - bValue)
+        for index in 0..<count {
+            let updatedValue = updated[index].doubleValue
+            let originalValue = original[index].doubleValue
+            result[index] = NSNumber(value: updatedValue - originalValue)
         }
 
         return result
@@ -272,8 +272,8 @@ actor WeightExtractor {
         let count = array.count
         data.reserveCapacity(count * 4) // 4 bytes per float32
 
-        for i in 0..<count {
-            let value = array[i].floatValue
+        for index in 0..<count {
+            let value = array[index].floatValue
             data.append(contentsOf: withUnsafeBytes(of: value) { Array($0) })
         }
 

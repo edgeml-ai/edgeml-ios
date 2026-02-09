@@ -250,7 +250,7 @@ public class DeviceMetadata {
 // MARK: - Reachability Helper
 
 /// Simple reachability check for network type detection
-fileprivate class Reachability {
+private class Reachability {
     enum Connection {
         case unavailable
         case wifi

@@ -36,7 +36,7 @@ public struct KeychainTokenStorage: TokenStorage {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account
         ]
         SecItemDelete(query as CFDictionary)
 
@@ -45,7 +45,7 @@ public struct KeychainTokenStorage: TokenStorage {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
@@ -61,7 +61,7 @@ public struct KeychainTokenStorage: TokenStorage {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
         var item: CFTypeRef?
@@ -78,7 +78,7 @@ public struct KeychainTokenStorage: TokenStorage {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account
         ]
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
@@ -103,7 +103,13 @@ public actor DeviceAuthManager {
     private let keychainService: String
     private let storage: TokenStorage
 
-    public init(baseURL: URL, orgId: String, deviceIdentifier: String, keychainService: String = "ai.edgeml", storage: TokenStorage = KeychainTokenStorage()) {
+    public init(
+        baseURL: URL,
+        orgId: String,
+        deviceIdentifier: String,
+        keychainService: String = "ai.edgeml",
+        storage: TokenStorage = KeychainTokenStorage()
+    ) {
         self.baseURL = baseURL
         self.orgId = orgId
         self.deviceIdentifier = deviceIdentifier
@@ -124,7 +130,7 @@ public actor DeviceAuthManager {
         var payload: [String: Any] = [
             "org_id": orgId,
             "device_identifier": deviceIdentifier,
-            "scopes": scopes,
+            "scopes": scopes
         ]
         if let accessTTLSeconds {
             payload["access_ttl_seconds"] = accessTTLSeconds

@@ -4,8 +4,8 @@
 [![codecov](https://codecov.io/gh/edgeml-ai/edgeml-ios/branch/main/graph/badge.svg)](https://codecov.io/gh/edgeml-ai/edgeml-ios)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
-[![Swift Version](https://img.shields.io/badge/Swift-5.5%2B-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/edgeml-ai/edgeml-ios)
+[![Swift Version](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org)
+[![Platform](https://img.shields.io/badge/platform-iOS%2015.0%2B%20%7C%20macOS%2012.0%2B-lightgrey.svg)](https://github.com/edgeml-ai/edgeml-ios)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > Enterprise-grade iOS SDK for privacy-preserving federated learning on Apple devices.
@@ -33,9 +33,9 @@ The EdgeML iOS SDK brings production-ready federated learning to iPhone and iPad
 
 ## Requirements
 
-- iOS 13.0+ / iPadOS 13.0+
-- Xcode 13.0+
-- Swift 5.5+
+- iOS 15.0+ / iPadOS 15.0+ / macOS 12.0+
+- Xcode 14.0+
+- Swift 5.9+
 
 ## Installation
 
@@ -79,65 +79,127 @@ print("Network: \(metadata["network_type"] ?? "unknown")")
 import Foundation
 import EdgeML
 
-class EdgeMLClient {
-    private let baseURL: String
-    private let apiKey: String
-    private let device = DeviceInfo()
-    private var deviceServerId: String?
-
-    init(apiKey: String, baseURL: String = "https://api.edgeml.io") {
-        self.apiKey = apiKey
-        self.baseURL = baseURL
-    }
-
-    func register(orgId: String) async throws -> String {
-        var data = device.toRegistrationDict()
-        data["org_id"] = orgId
-        data["sdk_version"] = "1.0.0"
-
-        let url = URL(string: "\(baseURL)/api/v1/devices/register")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: data)
-
-        let (responseData, _) = try await URLSession.shared.data(for: request)
-        let response = try JSONDecoder().decode([String: String].self, from: responseData)
-
-        self.deviceServerId = response["id"]
-        return response["id"] ?? ""
-    }
-
-    func sendHeartbeat() async throws {
-        guard let deviceId = deviceServerId else {
-            throw NSError(domain: "EdgeML", code: -1, userInfo: [
-                NSLocalizedDescriptionKey: "Device not registered"
-            ])
-        }
-
-        let metadata = device.updateMetadata()
-
-        let url = URL(string: "\(baseURL)/api/v1/devices/\(deviceId)/heartbeat")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["metadata": metadata])
-
-        let _ = try await URLSession.shared.data(for: request)
-    }
-}
-
-// Usage
 let client = EdgeMLClient(apiKey: "edg_your_key_here")
+
 Task {
+    // Register device
     let deviceId = try await client.register(orgId: "your_org_id")
     print("Registered with ID: \(deviceId)")
+
+    // Check for a pending training round
+    if let round = try await client.checkRoundAssignment(modelId: "my_model") {
+        print("Assigned to round \(round.roundId)")
+
+        // Participate: downloads model, trains locally, uploads weights
+        try await client.participateInRound(
+            roundId: round.roundId,
+            modelId: "my_model",
+            dataProvider: MyLocalDataProvider()
+        )
+    }
 
     // Send periodic heartbeats
     try await client.sendHeartbeat()
 }
+```
+
+## Federated Training
+
+The SDK supports server-coordinated round-based training. The server assigns devices to training rounds, each containing configuration for the training pass.
+
+### Round-Based Training
+
+```swift
+// Poll for a round assignment
+guard let round = try await client.checkRoundAssignment(modelId: "my_model") else {
+    print("No pending round")
+    return
+}
+
+// round includes:
+//   round.roundId          - server-assigned round identifier
+//   round.filterConfig     - gradient clipping configuration
+//   round.strategyParams   - training strategy parameters
+
+// participateInRound handles the full lifecycle:
+//   1. Fetch round config
+//   2. Download the global model
+//   3. Train on local data
+//   4. Apply filters (e.g. gradient clipping)
+//   5. Upload updated weights tagged with the round ID
+try await client.participateInRound(
+    roundId: round.roundId,
+    modelId: "my_model",
+    dataProvider: MyLocalDataProvider()
+)
+```
+
+### Strategy Parameters
+
+Round assignments include `strategyParams` that control training behavior:
+
+| Parameter | Description |
+|---|---|
+| `localEpochs` | Number of local training epochs |
+| `learningRate` | Learning rate for the local optimizer |
+| `proximalMu` | Proximal term weight for FedProx |
+| `lambdaDitto` | Regularization strength for Ditto |
+| `personalizedLayers` | Layer names for FedPer head/body split |
+
+### Filter Config
+
+Round assignments include a `filterConfig` with gradient clipping support. The SDK automatically applies gradient clipping to weight updates before uploading to the server.
+
+## Personalization
+
+The SDK supports on-device personalization through Ditto and FedPer strategies, managed by `PersonalizationManager`.
+
+### Training Modes
+
+```swift
+// Standard federated averaging (default)
+let mode: TrainingMode = .standard
+
+// Ditto: regularized local personalization
+let mode: TrainingMode = .ditto
+
+// FedPer: personalized head layers with shared body
+let mode: TrainingMode = .fedPer
+```
+
+### Ditto Personalization
+
+Ditto trains a personalized model that stays close to the global model via a regularization term.
+
+```swift
+let personalization = PersonalizationManager()
+
+// Configure Ditto regularization strength
+personalization.configureDitto(lambda: 0.5)
+
+// Fetch the latest personalized model from the server
+let model = try await personalization.getPersonalizedModel()
+
+// Run incremental on-device training
+personalization.train(model: model, data: localData, mode: .ditto)
+
+// Upload personalized update
+try await personalization.uploadPersonalizedUpdate()
+```
+
+### FedPer Personalization
+
+FedPer splits the model into shared body layers (aggregated globally) and personalized head layers (kept on-device).
+
+```swift
+let personalization = PersonalizationManager()
+
+// Define which layers are personalized (head)
+personalization.configurePersonalizedLayers(["classifier", "fc_head"])
+
+let model = try await personalization.getPersonalizedModel()
+personalization.train(model: model, data: localData, mode: .fedPer)
+try await personalization.uploadPersonalizedUpdate()
 ```
 
 ## Device Information Collected

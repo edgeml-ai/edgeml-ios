@@ -49,24 +49,24 @@ public final class EdgeMLClient: @unchecked Sendable {
 
     // MARK: - Properties
 
-    private let apiClient: APIClient
-    private let modelManager: ModelManager
-    private let secureStorage: SecureStorage
-    private let configuration: EdgeMLConfiguration
-    private let logger: Logger
+    let apiClient: APIClient
+    let modelManager: ModelManager
+    fileprivate let secureStorage: SecureStorage
+    let configuration: EdgeMLConfiguration
+    let logger: Logger
 
     /// Organization ID for this client.
     public let orgId: String
 
     /// Server-assigned device UUID (set after registration).
-    private var serverDeviceId: String?
+    fileprivate var serverDeviceId: String?
     /// Client-generated device identifier (e.g., IDFV).
-    private var clientDeviceIdentifier: String?
-    private var deviceRegistration: DeviceRegistrationResponse?
+    fileprivate var clientDeviceIdentifier: String?
+    fileprivate var deviceRegistration: DeviceRegistrationResponse?
 
     /// Heartbeat timer for automatic health reporting.
-    private var heartbeatTask: Task<Void, Never>?
-    private let heartbeatInterval: TimeInterval
+    fileprivate var heartbeatTask: Task<Void, Never>?
+    fileprivate let heartbeatInterval: TimeInterval
 
     /// Whether the device is registered with the server.
     public var isRegistered: Bool {
@@ -140,8 +140,11 @@ public final class EdgeMLClient: @unchecked Sendable {
     deinit {
         heartbeatTask?.cancel()
     }
+}
 
-    // MARK: - Device Registration
+// MARK: - Device Registration
+
+extension EdgeMLClient {
 
     /// Registers this device with the EdgeML server.
     ///
@@ -169,36 +172,11 @@ public final class EdgeMLClient: @unchecked Sendable {
 
         let deviceInfo = await buildDeviceInfo()
 
-        let capabilities = DeviceCapabilities(
-            supportsTraining: deviceInfo.supportsTraining,
-            coremlVersion: deviceInfo.coremlVersion,
-            hasNeuralEngine: deviceInfo.hasNeuralEngine,
-            maxBatchSize: 32,
-            supportedFormats: ["coreml", "onnx"]
-        )
-
-        let hardwareInfo = DeviceInfoRequest(
-            manufacturer: "Apple",
-            model: deviceInfo.deviceModel,
-            cpuArchitecture: "arm64",
-            gpuAvailable: deviceInfo.hasNeuralEngine,
-            totalMemoryMb: deviceInfo.totalMemoryMb,
-            availableStorageMb: deviceInfo.availableStorageMb
-        )
-
-        let request = DeviceRegistrationRequest(
-            deviceIdentifier: identifier,
-            orgId: orgId,
-            platform: "ios",
-            osVersion: deviceInfo.osVersion,
-            sdkVersion: "1.0.0",
+        let request = buildRegistrationRequest(
+            identifier: identifier,
             appVersion: appVersion,
-            deviceInfo: hardwareInfo,
-            locale: deviceInfo.locale,
-            region: deviceInfo.region,
-            timezone: deviceInfo.timezone,
             metadata: metadata,
-            capabilities: capabilities
+            deviceInfo: deviceInfo
         )
 
         let registration = try await apiClient.registerDevice(request)
@@ -219,8 +197,11 @@ public final class EdgeMLClient: @unchecked Sendable {
 
         return registration
     }
+}
 
-    // MARK: - Heartbeat
+// MARK: - Heartbeat
+
+extension EdgeMLClient {
 
     /// Sends a heartbeat to the server.
     ///
@@ -233,7 +214,7 @@ public final class EdgeMLClient: @unchecked Sendable {
             throw EdgeMLError.deviceNotRegistered
         }
 
-        var metadata: [String: String]? = nil
+        var metadata: [String: String]?
         if let availableStorageMb = availableStorageMb {
             metadata = ["available_storage_mb": String(availableStorageMb)]
         }
@@ -271,8 +252,11 @@ public final class EdgeMLClient: @unchecked Sendable {
         heartbeatTask?.cancel()
         heartbeatTask = nil
     }
+}
 
-    // MARK: - Device Groups
+// MARK: - Device Groups
+
+extension EdgeMLClient {
 
     /// Gets the groups this device belongs to.
     ///
@@ -317,346 +301,14 @@ public final class EdgeMLClient: @unchecked Sendable {
 
         return try await apiClient.getDeviceInfo(deviceId: deviceId)
     }
+}
 
-    // MARK: - Model Management
+// MARK: - Private Helpers
 
-    /// Downloads a model from the server.
-    ///
-    /// The model is cached locally after download for offline use.
-    ///
-    /// - Parameters:
-    ///   - modelId: Identifier of the model to download.
-    ///   - version: Optional specific version. If nil, downloads the latest version.
-    /// - Returns: The downloaded model ready for inference.
-    /// - Throws: `EdgeMLError` if download fails.
-    public func downloadModel(
-        modelId: String,
-        version: String? = nil
-    ) async throws -> EdgeMLModel {
-        guard let deviceId = self.deviceId else {
-            throw EdgeMLError.deviceNotRegistered
-        }
-
-        if configuration.enableLogging {
-            logger.info("Downloading model: \(modelId)")
-        }
-
-        // Resolve version if not specified
-        let resolvedVersion: String
-        if let version = version {
-            resolvedVersion = version
-        } else {
-            let resolution = try await apiClient.resolveVersion(deviceId: deviceId, modelId: modelId)
-            resolvedVersion = resolution.version
-        }
-
-        return try await modelManager.downloadModel(modelId: modelId, version: resolvedVersion)
-    }
-
-    /// Gets a cached model without network access.
-    ///
-    /// - Parameter modelId: Identifier of the model.
-    /// - Returns: The cached model, or nil if not cached.
-    public func getCachedModel(modelId: String) -> EdgeMLModel? {
-        return modelManager.getCachedModel(modelId: modelId)
-    }
-
-    /// Gets a cached model with a specific version.
-    ///
-    /// - Parameters:
-    ///   - modelId: Identifier of the model.
-    ///   - version: Version of the model.
-    /// - Returns: The cached model, or nil if not cached.
-    public func getCachedModel(modelId: String, version: String) -> EdgeMLModel? {
-        return modelManager.getCachedModel(modelId: modelId, version: version)
-    }
-
-    /// Checks if a model update is available.
-    ///
-    /// - Parameter modelId: Identifier of the model.
-    /// - Returns: Update information if available, nil otherwise.
-    /// - Throws: `EdgeMLError` if the check fails.
-    public func checkForUpdates(modelId: String) async throws -> ModelUpdateInfo? {
-        guard let cachedModel = getCachedModel(modelId: modelId) else {
-            return nil
-        }
-
-        return try await apiClient.checkForUpdates(
-            modelId: modelId,
-            currentVersion: cachedModel.version
-        )
-    }
-
-    /// Clears all cached models.
-    public func clearCache() async throws {
-        try await modelManager.clearCache()
-
-        if configuration.enableLogging {
-            logger.info("Model cache cleared")
-        }
-    }
-
-    // MARK: - Streaming Inference
-
-    /// Streams generative inference and auto-reports metrics to the server.
-    ///
-    /// - Parameters:
-    ///   - model: The model to run inference on.
-    ///   - input: Modality-specific input.
-    ///   - modality: The output modality.
-    ///   - engine: Optional custom engine. Defaults to a modality-appropriate engine.
-    /// - Returns: An ``AsyncThrowingStream`` of ``InferenceChunk``.
-    public func generateStream(
-        model: EdgeMLModel,
-        input: Any,
-        modality: Modality,
-        engine: StreamingInferenceEngine? = nil
-    ) -> AsyncThrowingStream<InferenceChunk, Error> {
-        let (stream, getResult) = model.generateStream(input: input, modality: modality, engine: engine)
-        let apiClient = self.apiClient
-        let deviceId = self.deviceId
-        let orgId = self.orgId
-        let sessionId = UUID().uuidString
-
-        // Report generation_started
-        if let deviceId = deviceId {
-            Task {
-                let ctx = InferenceEventContext(
-                    deviceId: deviceId,
-                    modelId: model.id,
-                    version: model.version,
-                    modality: modality.rawValue,
-                    sessionId: sessionId
-                )
-                let event = InferenceEventRequest(
-                    context: ctx,
-                    eventType: "generation_started",
-                    timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
-                    orgId: orgId
-                )
-                try? await apiClient.reportInferenceEvent(event)
-            }
-        }
-
-        // Wrap the stream to report completion
-        return AsyncThrowingStream<InferenceChunk, Error> { continuation in
-            let task = Task {
-                var failed = false
-                do {
-                    for try await chunk in stream {
-                        continuation.yield(chunk)
-                    }
-                } catch {
-                    failed = true
-                    continuation.finish(throwing: error)
-                }
-
-                if !failed {
-                    continuation.finish()
-                }
-
-                // Report completion event
-                if let deviceId = deviceId, let result = getResult() {
-                    let metrics = InferenceEventMetrics(
-                        ttfcMs: result.ttfcMs,
-                        totalChunks: result.totalChunks,
-                        totalDurationMs: result.totalDurationMs,
-                        throughput: result.throughput
-                    )
-                    let ctx = InferenceEventContext(
-                        deviceId: deviceId,
-                        modelId: model.id,
-                        version: model.version,
-                        modality: modality.rawValue,
-                        sessionId: sessionId
-                    )
-                    let event = InferenceEventRequest(
-                        context: ctx,
-                        eventType: failed ? "generation_failed" : "generation_completed",
-                        timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
-                        metrics: metrics,
-                        orgId: orgId
-                    )
-                    try? await apiClient.reportInferenceEvent(event)
-                }
-            }
-
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
-        }
-    }
-
-    // MARK: - Training
-
-    /// Participates in a federated training round.
-    ///
-    /// This method:
-    /// 1. Downloads the latest model if needed
-    /// 2. Trains the model on local data
-    /// 3. Extracts weight updates
-    /// 4. Uploads updates to the server
-    ///
-    /// - Parameters:
-    ///   - modelId: Identifier of the model to train.
-    ///   - dataProvider: Closure that provides training data.
-    ///   - config: Training configuration.
-    /// - Returns: Result of the training round.
-    /// - Throws: `EdgeMLError` if training fails.
-    public func participateInRound(
-        modelId: String,
-        dataProvider: @escaping () -> MLBatchProvider,
-        config: TrainingConfig = .standard
-    ) async throws -> RoundResult {
-        guard let deviceId = self.deviceId else {
-            throw EdgeMLError.deviceNotRegistered
-        }
-
-        if configuration.enableLogging {
-            logger.info("Participating in training round for model: \(modelId)")
-        }
-
-        // Get or download model
-        let model: EdgeMLModel
-        if let cached = getCachedModel(modelId: modelId) {
-            // Check for updates
-            if let updateInfo = try? await checkForUpdates(modelId: modelId), updateInfo.isRequired {
-                model = try await downloadModel(modelId: modelId, version: updateInfo.newVersion)
-            } else {
-                model = cached
-            }
-        } else {
-            model = try await downloadModel(modelId: modelId)
-        }
-
-        // Train locally
-        let trainer = FederatedTrainer(configuration: configuration)
-        let trainingResult = try await trainer.train(
-            model: model,
-            dataProvider: dataProvider,
-            config: config
-        )
-
-        // Extract and upload weights
-        var weightUpdate = try await trainer.extractWeightUpdate(
-            model: model,
-            trainingResult: trainingResult
-        )
-        weightUpdate = WeightUpdate(
-            modelId: weightUpdate.modelId,
-            version: weightUpdate.version,
-            deviceId: deviceId,
-            weightsData: weightUpdate.weightsData,
-            sampleCount: weightUpdate.sampleCount,
-            metrics: weightUpdate.metrics
-        )
-
-        try await apiClient.uploadWeights(weightUpdate)
-
-        let roundResult = RoundResult(
-            roundId: UUID().uuidString,
-            trainingResult: trainingResult,
-            uploadSucceeded: true,
-            completedAt: Date()
-        )
-
-        if configuration.enableLogging {
-            logger.info("Training round completed: \(trainingResult.sampleCount) samples")
-        }
-
-        return roundResult
-    }
-
-    /// Trains a model locally without uploading weights.
-    ///
-    /// Useful for testing and validation.
-    ///
-    /// - Parameters:
-    ///   - model: The model to train.
-    ///   - data: Training data provider.
-    ///   - config: Training configuration.
-    /// - Returns: Training result.
-    /// - Throws: `EdgeMLError` if training fails.
-    public func trainLocal(
-        model: EdgeMLModel,
-        data: MLBatchProvider,
-        config: TrainingConfig = .standard
-    ) async throws -> TrainingResult {
-        let trainer = FederatedTrainer(configuration: configuration)
-        return try await trainer.train(
-            model: model,
-            dataProvider: { data },
-            config: config
-        )
-    }
-
-    // MARK: - Background Operations
-
-    /// Enables background training when conditions are met.
-    ///
-    /// Background training runs during device idle time when:
-    /// - Device is connected to power (optional)
-    /// - Network is available
-    /// - Battery level is sufficient
-    ///
-    /// - Parameters:
-    ///   - modelId: Identifier of the model to train.
-    ///   - dataProvider: Closure that provides training data.
-    ///   - constraints: Background execution constraints.
-    public func enableBackgroundTraining(
-        modelId: String,
-        dataProvider: @escaping @Sendable () -> MLBatchProvider,
-        constraints: BackgroundConstraints = .standard
-    ) {
-        let sync = BackgroundSync.shared
-        sync.configure(
-            modelId: modelId,
-            dataProvider: dataProvider,
-            constraints: constraints,
-            client: self
-        )
-        sync.scheduleNextTraining()
-
-        if configuration.enableLogging {
-            logger.info("Background training enabled for model: \(modelId)")
-        }
-    }
-
-    /// Disables background training.
-    public func disableBackgroundTraining() {
-        BackgroundSync.shared.cancelScheduledTraining()
-
-        if configuration.enableLogging {
-            logger.info("Background training disabled")
-        }
-    }
-
-    // MARK: - Event Tracking
-
-    /// Tracks an event for an experiment.
-    ///
-    /// - Parameters:
-    ///   - experimentId: Experiment identifier.
-    ///   - eventName: Name of the event.
-    ///   - properties: Event properties.
-    public func trackEvent(
-        experimentId: String,
-        eventName: String,
-        properties: [String: String] = [:]
-    ) async throws {
-        let event = TrackingEvent(
-            name: eventName,
-            properties: properties,
-            timestamp: Date()
-        )
-
-        try await apiClient.trackEvent(experimentId: experimentId, event: event)
-    }
-
-    // MARK: - Private Methods
+extension EdgeMLClient {
 
     /// Device info collected during registration.
-    private struct LocalDeviceInfo {
+    fileprivate struct LocalDeviceInfo {
         let osVersion: String
         let deviceModel: String
         let totalMemoryMb: Int?
@@ -669,9 +321,9 @@ public final class EdgeMLClient: @unchecked Sendable {
         let hasNeuralEngine: Bool
     }
 
-    private func buildDeviceInfo() async -> LocalDeviceInfo {
-        var availableStorageMb: Int? = nil
-        var totalMemoryMb: Int? = nil
+    fileprivate func buildDeviceInfo() async -> LocalDeviceInfo {
+        var availableStorageMb: Int?
+        var totalMemoryMb: Int?
         let deviceModel: String
         let osVersion: String
 
@@ -721,7 +373,7 @@ public final class EdgeMLClient: @unchecked Sendable {
         )
     }
 
-    private func generateDeviceIdentifier() -> String {
+    fileprivate func generateDeviceIdentifier() -> String {
         #if canImport(UIKit)
         // Use IDFV (Identifier for Vendor) on iOS
         if let idfv = UIDevice.current.identifierForVendor?.uuidString {
@@ -737,7 +389,7 @@ public final class EdgeMLClient: @unchecked Sendable {
         return newId
     }
 
-    private func hasNeuralEngine() -> Bool {
+    fileprivate func hasNeuralEngine() -> Bool {
         // Check for Neural Engine availability
         #if canImport(UIKit)
         // A12 Bionic and later have Neural Engine
@@ -746,5 +398,55 @@ public final class EdgeMLClient: @unchecked Sendable {
         #else
         return false
         #endif
+    }
+
+    fileprivate func buildRegistrationRequest(
+        identifier: String,
+        appVersion: String?,
+        metadata: [String: String]?,
+        deviceInfo: LocalDeviceInfo
+    ) -> DeviceRegistrationRequest {
+        let capabilities = DeviceCapabilities(
+            supportsTraining: deviceInfo.supportsTraining,
+            coremlVersion: deviceInfo.coremlVersion,
+            hasNeuralEngine: deviceInfo.hasNeuralEngine,
+            maxBatchSize: 32,
+            supportedFormats: ["coreml", "onnx"]
+        )
+
+        let hardwareInfo = DeviceInfoRequest(
+            manufacturer: "Apple",
+            model: deviceInfo.deviceModel,
+            cpuArchitecture: "arm64",
+            gpuAvailable: deviceInfo.hasNeuralEngine,
+            totalMemoryMb: deviceInfo.totalMemoryMb,
+            availableStorageMb: deviceInfo.availableStorageMb
+        )
+
+        return DeviceRegistrationRequest(
+            deviceIdentifier: identifier,
+            orgId: orgId,
+            platform: "ios",
+            osVersion: deviceInfo.osVersion,
+            sdkVersion: "1.0.0",
+            appVersion: appVersion,
+            deviceInfo: hardwareInfo,
+            locale: deviceInfo.locale,
+            region: deviceInfo.region,
+            timezone: deviceInfo.timezone,
+            metadata: metadata,
+            capabilities: capabilities
+        )
+    }
+
+    func resolveModelForTraining(modelId: String) async throws -> EdgeMLModel {
+        if let cached = getCachedModel(modelId: modelId) {
+            if let updateInfo = try? await checkForUpdates(modelId: modelId),
+               updateInfo.isRequired {
+                return try await downloadModel(modelId: modelId, version: updateInfo.newVersion)
+            }
+            return cached
+        }
+        return try await downloadModel(modelId: modelId)
     }
 }
