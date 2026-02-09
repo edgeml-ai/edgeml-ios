@@ -205,20 +205,20 @@ private final class MockModelCachingImpl: ModelCaching, @unchecked Sendable {
 
     var currentSize: UInt64 { 0 }
 
-    func get(modelId: String, version: String) -> EdgeMLModel? {
+    func get(modelId _: String, version _: String) -> EdgeMLModel? {
         // Only check fake store for these tests
         return nil
     }
 
-    func getLatest(modelId: String) -> EdgeMLModel? {
+    func getLatest(modelId _: String) -> EdgeMLModel? {
         return nil
     }
 
-    func store(_ model: EdgeMLModel) {
+    func store(_ _: EdgeMLModel) {
         // Can't be used without real EdgeMLModel
     }
 
-    func cacheCompiledModel(modelId: String, version: String, compiledURL: URL) async throws -> URL {
+    func cacheCompiledModel(modelId _: String, version _: String, compiledURL: URL) async throws -> URL {
         return compiledURL
     }
 

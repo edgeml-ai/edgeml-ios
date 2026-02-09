@@ -12,6 +12,8 @@ import XCTest
 /// rather than constructing full model objects.
 final class ModelManagerTests: XCTestCase {
 
+    private static let testServerURL = URL(string: "https://test.edgeml.ai")!
+
     private var mockCache: MockModelCache!
     private var config: EdgeMLConfiguration!
 
@@ -172,7 +174,7 @@ final class ModelManagerTests: XCTestCase {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [SharedMockURLProtocol.self]
         let apiClient = APIClient(
-            serverURL: URL(string: "https://test.edgeml.ai")!,
+            serverURL: Self.testServerURL,
             configuration: config,
             sessionConfiguration: sessionConfig
         )
@@ -223,7 +225,7 @@ private final class MockModelCache: ModelCaching, @unchecked Sendable {
         return nil
     }
 
-    func store(_ model: EdgeMLModel) {
+    func store(_ _: EdgeMLModel) {
         storeCallCount += 1
     }
 

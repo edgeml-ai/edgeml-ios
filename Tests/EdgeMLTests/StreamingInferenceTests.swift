@@ -144,7 +144,7 @@ final class StreamingInferenceTests: XCTestCase {
         let wrapper = InstrumentedStreamWrapper(modality: .text)
         let (stream, getResult) = wrapper.wrap(engine, input: "prompt")
 
-        for try await _ in stream {}
+        for try await _ in stream { /* No-op: drain stream */ }
 
         let result = try XCTUnwrap(getResult())
         // TTFC should be >= 20ms (the delay for the first chunk)
@@ -159,7 +159,7 @@ final class StreamingInferenceTests: XCTestCase {
         let wrapper = InstrumentedStreamWrapper(modality: .image)
         let (stream, getResult) = wrapper.wrap(engine, input: "prompt")
 
-        for try await _ in stream {}
+        for try await _ in stream { /* No-op: drain stream */ }
 
         let result = try XCTUnwrap(getResult())
         XCTAssertEqual(result.totalChunks, 5)
@@ -268,7 +268,7 @@ final class StreamingInferenceTests: XCTestCase {
         let wrapper = InstrumentedStreamWrapper(modality: .text)
         let (stream, getResult) = wrapper.wrap(engine, input: "latency-test")
 
-        for try await _ in stream {}
+        for try await _ in stream { /* No-op: drain stream */ }
 
         let result = try XCTUnwrap(getResult())
         // Average latency should be roughly (10 + 20 + 30) / 3 = 20ms

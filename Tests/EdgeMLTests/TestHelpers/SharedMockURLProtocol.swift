@@ -66,7 +66,10 @@ final class SharedMockURLProtocol: URLProtocol {
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        // Intentionally empty: mock responses are delivered synchronously in
+        // startLoading(), so there is no in-flight work to cancel.
+    }
 
     /// Resets all captured state. Call from `setUp()`.
     static func reset() {

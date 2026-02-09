@@ -25,6 +25,6 @@ enum TestConfiguration {
         )
     }
 
-    /// Shorthand for the default fast configuration.
-    static var `default`: EdgeMLConfiguration { fast() }
+    /// Shorthand for the standard fast configuration.
+    static var standard: EdgeMLConfiguration { fast() }
 }
