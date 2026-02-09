@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: macos-15
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -18,11 +18,11 @@ jobs:
 
       - name: Build
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=macOS' build
+          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' build
 
       - name: Run tests with coverage
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=macOS' -enableCodeCoverage YES -resultBundlePath TestResults test
+          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
 
       - name: Generate coverage report
         run: |
@@ -38,7 +38,7 @@ jobs:
 
   sonarcloud:
     name: SonarCloud Analysis
-    runs-on: macos-15
+    runs-on: macos-14
     needs: test
 
     steps:
@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=macOS' -enableCodeCoverage YES -resultBundlePath TestResults test
+          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
 
       - name: Generate coverage report for SonarCloud
         run: |
@@ -64,7 +64,7 @@ jobs:
 
   security:
     name: Security Scan
-    runs-on: macos-15
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
