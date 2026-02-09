@@ -1,11 +1,11 @@
 # EdgeML iOS SDK
 
-[![CI](https://github.com/edgeml/edgeml-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/edgeml/edgeml-ios/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/edgeml/edgeml-ios/branch/main/graph/badge.svg)](https://codecov.io/gh/edgeml/edgeml-ios)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=edgeml_edgeml-ios&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=edgeml_edgeml-ios)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=edgeml_edgeml-ios&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=edgeml_edgeml-ios)
+[![CI](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/edgeml-ai/edgeml-ios/branch/main/graph/badge.svg)](https://codecov.io/gh/edgeml-ai/edgeml-ios)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
 [![Swift Version](https://img.shields.io/badge/Swift-5.5%2B-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/edgeml/edgeml-ios)
+[![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/edgeml-ai/edgeml-ios)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > Enterprise-grade iOS SDK for privacy-preserving federated learning on Apple devices.
@@ -316,7 +316,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For issues and feature requests, please use the [GitHub issue tracker](https://github.com/edgeml/edgeml-ios/issues).
+For issues and feature requests, please use the [GitHub issue tracker](https://github.com/edgeml-ai/edgeml-ios/issues).
 
 For questions: support@edgeml.io
 

@@ -3,6 +3,10 @@ import XCTest
 
 final class APIModelsTests: XCTestCase {
 
+    // MARK: - Test Constants
+
+    private static let testDownloadURL = "https://storage.example.com/models/fraud-v2.mlmodelc"
+
     // MARK: - Device Registration Tests
 
     func testDeviceCapabilitiesEncoding() throws {
@@ -35,12 +39,44 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNil(capabilities.supportedFormats)
     }
 
+    func testDeviceRegistrationRequestEncoding() throws {
+        let capabilities = DeviceCapabilities(
+            supportsTraining: true,
+            coremlVersion: "5.0",
+            hasNeuralEngine: true
+        )
+
+        let request = DeviceRegistrationRequest(
+            deviceIdentifier: "test-device-123",
+            orgId: "test-org",
+            platform: "ios",
+            osVersion: nil,
+            sdkVersion: nil,
+            appVersion: nil,
+            deviceInfo: nil,
+            locale: nil,
+            region: nil,
+            timezone: nil,
+            metadata: ["app_version": "1.0.0"],
+            capabilities: capabilities
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["device_identifier"] as? String, "test-device-123")
+        XCTAssertEqual(json["platform"] as? String, "ios")
+        XCTAssertNotNil(json["capabilities"])
+        XCTAssertNotNil(json["metadata"])
+    }
+
     func testDeviceRegistrationResponseDecoding() throws {
         let json = """
         {
-            "id": "uuid-abc-123",
-            "device_identifier": "idfv-xyz",
-            "org_id": "org-42",
+            "id": "abc-123",
+            "device_identifier": "test-device",
+            "org_id": "org-123",
             "status": "active",
             "registered_at": "2024-01-15T10:30:00Z"
         }
@@ -51,9 +87,9 @@ final class APIModelsTests: XCTestCase {
 
         let registration = try decoder.decode(DeviceRegistrationResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(registration.id, "uuid-abc-123")
-        XCTAssertEqual(registration.deviceIdentifier, "idfv-xyz")
-        XCTAssertEqual(registration.orgId, "org-42")
+        XCTAssertEqual(registration.id, "abc-123")
+        XCTAssertEqual(registration.deviceIdentifier, "test-device")
+        XCTAssertEqual(registration.orgId, "org-123")
         XCTAssertEqual(registration.status, "active")
         XCTAssertNotNil(registration.registeredAt)
     }
@@ -267,7 +303,7 @@ final class APIModelsTests: XCTestCase {
     func testDownloadURLResponseDecoding() throws {
         let json = """
         {
-            "url": "https://storage.example.com/models/fraud-v2.mlmodelc",
+            "url": "\(Self.testDownloadURL)",
             "expires_at": "2024-06-15T13:00:00Z",
             "checksum": "sha256:abcdef1234567890",
             "file_size": 10485760
@@ -279,7 +315,7 @@ final class APIModelsTests: XCTestCase {
 
         let response = try decoder.decode(DownloadURLResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(response.url, "https://storage.example.com/models/fraud-v2.mlmodelc")
+        XCTAssertEqual(response.url, Self.testDownloadURL)
         XCTAssertEqual(response.checksum, "sha256:abcdef1234567890")
         XCTAssertEqual(response.fileSize, 10485760)
         XCTAssertNotNil(response.expiresAt)
@@ -481,12 +517,15 @@ final class APIModelsTests: XCTestCase {
     // MARK: - Inference Event Request Tests
 
     func testInferenceEventRequestEncoding() throws {
-        let request = InferenceEventRequest(
+        let context = InferenceEventContext(
             deviceId: "device-123",
             modelId: "text-gen",
             version: "1.0.0",
             modality: "text",
-            sessionId: "session-abc",
+            sessionId: "session-abc"
+        )
+        let request = InferenceEventRequest(
+            context: context,
             eventType: "generation_started",
             timestampMs: 1718450000000,
             orgId: "org-42"
@@ -508,12 +547,15 @@ final class APIModelsTests: XCTestCase {
 
     func testInferenceEventRequestWithMetrics() throws {
         let metrics = InferenceEventMetrics(ttfcMs: 42.0, totalDurationMs: 500.0)
-        let request = InferenceEventRequest(
+        let context = InferenceEventContext(
             deviceId: "d1",
             modelId: "m1",
             version: "1.0",
             modality: "text",
-            sessionId: "s1",
+            sessionId: "s1"
+        )
+        let request = InferenceEventRequest(
+            context: context,
             eventType: "generation_completed",
             timestampMs: 1000,
             metrics: metrics

@@ -7,8 +7,12 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
+#if canImport(CoreTelephony)
 import CoreTelephony
+#endif
 
 /// Collects and manages device information for EdgeML platform.
 ///
@@ -30,7 +34,11 @@ public class DeviceMetadata {
 
     /// Stable device identifier (IDFV - Identifier For Vendor)
     public var deviceId: String {
+        #if canImport(UIKit)
         return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        #else
+        return UUID().uuidString
+        #endif
     }
 
     // MARK: - Device Hardware
@@ -49,7 +57,11 @@ public class DeviceMetadata {
                 String(validatingUTF8: $0)
             }
         }
+        #if canImport(UIKit)
         return modelCode ?? UIDevice.current.model
+        #else
+        return modelCode ?? "Mac"
+        #endif
     }
 
     /// Get CPU architecture (arm64)
@@ -98,6 +110,7 @@ public class DeviceMetadata {
 
     /// Get current battery level (0-100)
     public var batteryLevel: Int? {
+        #if canImport(UIKit)
         UIDevice.current.isBatteryMonitoringEnabled = true
         let level = UIDevice.current.batteryLevel
         UIDevice.current.isBatteryMonitoringEnabled = false
@@ -106,6 +119,9 @@ public class DeviceMetadata {
             return nil  // Battery level unknown
         }
         return Int(level * 100)
+        #else
+        return nil
+        #endif
     }
 
     /// Get current network type (wifi, cellular, unknown)
@@ -130,12 +146,22 @@ public class DeviceMetadata {
 
     /// Get iOS platform string
     public var platform: String {
+        #if os(iOS)
         return "ios"
+        #elseif os(macOS)
+        return "macos"
+        #else
+        return "unknown"
+        #endif
     }
 
     /// Get iOS version
     public var osVersion: String {
+        #if canImport(UIKit)
         return UIDevice.current.systemVersion
+        #else
+        return ProcessInfo.processInfo.operatingSystemVersionString
+        #endif
     }
 
     /// Get user's locale

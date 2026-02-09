@@ -33,7 +33,7 @@ public final class VideoEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     // MARK: - StreamingInferenceEngine
 
-    public func generate(input: Any, modality: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
+    public func generate(input _: Any, modality _: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
         let frameCount = self.frameCount
         let bytesPerFrame = width * height * 4 // RGBA
 

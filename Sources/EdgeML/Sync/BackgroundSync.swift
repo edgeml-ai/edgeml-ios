@@ -134,18 +134,20 @@ public final class BackgroundSync: @unchecked Sendable {
         // Schedule next training before starting
         scheduleNextTraining()
 
+        // Snapshot state under the lock before entering async context
+        lock.lock()
+        guard let modelId = modelId,
+              let dataProvider = dataProvider,
+              let client = client else {
+            lock.unlock()
+            task.setTaskCompleted(success: false)
+            return
+        }
+        lock.unlock()
+
         // Create training task
         let trainingTask = Task {
             do {
-                lock.lock()
-                guard let modelId = modelId,
-                      let dataProvider = dataProvider,
-                      let client = client else {
-                    lock.unlock()
-                    throw EdgeMLError.unknown(underlying: nil)
-                }
-                lock.unlock()
-
                 let result = try await client.participateInRound(
                     modelId: modelId,
                     dataProvider: dataProvider
@@ -173,16 +175,18 @@ public final class BackgroundSync: @unchecked Sendable {
         // Schedule next sync
         scheduleSync()
 
+        // Snapshot state under the lock before entering async context
+        lock.lock()
+        guard let modelId = modelId,
+              let client = client else {
+            lock.unlock()
+            task.setTaskCompleted(success: false)
+            return
+        }
+        lock.unlock()
+
         let syncTask = Task {
             do {
-                lock.lock()
-                guard let modelId = modelId,
-                      let client = client else {
-                    lock.unlock()
-                    return
-                }
-                lock.unlock()
-
                 // Check for model updates
                 if let _ = try await client.checkForUpdates(modelId: modelId) {
                     // Download update

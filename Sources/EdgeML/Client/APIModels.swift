@@ -620,17 +620,13 @@ public struct InferenceEventMetrics: Codable, Sendable {
     }
 }
 
-/// Request body for ``POST /api/v1/inference/events``.
-public struct InferenceEventRequest: Codable, Sendable {
+/// Identifies the device, model, and session for an inference event.
+public struct InferenceEventContext: Codable, Sendable {
     public let deviceId: String
     public let modelId: String
     public let version: String
     public let modality: String
     public let sessionId: String
-    public let eventType: String
-    public let timestampMs: Int64
-    public var metrics: InferenceEventMetrics?
-    public var orgId: String?
 
     enum CodingKeys: String, CodingKey {
         case deviceId = "device_id"
@@ -638,6 +634,26 @@ public struct InferenceEventRequest: Codable, Sendable {
         case version
         case modality
         case sessionId = "session_id"
+    }
+
+    public init(deviceId: String, modelId: String, version: String, modality: String, sessionId: String) {
+        self.deviceId = deviceId
+        self.modelId = modelId
+        self.version = version
+        self.modality = modality
+        self.sessionId = sessionId
+    }
+}
+
+/// Request body for ``POST /api/v1/inference/events``.
+public struct InferenceEventRequest: Codable, Sendable {
+    public let context: InferenceEventContext
+    public let eventType: String
+    public let timestampMs: Int64
+    public var metrics: InferenceEventMetrics?
+    public var orgId: String?
+
+    enum CodingKeys: String, CodingKey {
         case eventType = "event_type"
         case timestampMs = "timestamp_ms"
         case metrics
@@ -645,24 +661,34 @@ public struct InferenceEventRequest: Codable, Sendable {
     }
 
     public init(
-        deviceId: String,
-        modelId: String,
-        version: String,
-        modality: String,
-        sessionId: String,
+        context: InferenceEventContext,
         eventType: String,
         timestampMs: Int64,
         metrics: InferenceEventMetrics? = nil,
         orgId: String? = nil
     ) {
-        self.deviceId = deviceId
-        self.modelId = modelId
-        self.version = version
-        self.modality = modality
-        self.sessionId = sessionId
+        self.context = context
         self.eventType = eventType
         self.timestampMs = timestampMs
         self.metrics = metrics
         self.orgId = orgId
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try context.encode(to: encoder)
+        try container.encode(eventType, forKey: .eventType)
+        try container.encode(timestampMs, forKey: .timestampMs)
+        try container.encodeIfPresent(metrics, forKey: .metrics)
+        try container.encodeIfPresent(orgId, forKey: .orgId)
+    }
+
+    public init(from decoder: Decoder) throws {
+        self.context = try InferenceEventContext(from: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.eventType = try container.decode(String.self, forKey: .eventType)
+        self.timestampMs = try container.decode(Int64.self, forKey: .timestampMs)
+        self.metrics = try container.decodeIfPresent(InferenceEventMetrics.self, forKey: .metrics)
+        self.orgId = try container.decodeIfPresent(String.self, forKey: .orgId)
     }
 }
