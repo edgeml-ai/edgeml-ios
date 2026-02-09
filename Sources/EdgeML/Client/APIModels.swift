@@ -582,3 +582,87 @@ public struct APIErrorResponse: Codable, Sendable {
     /// Error detail message.
     public let detail: String
 }
+
+// MARK: - Inference Events
+
+/// Metrics payload for an inference event.
+public struct InferenceEventMetrics: Codable, Sendable {
+    public var ttfcMs: Double?
+    public var chunkIndex: Int?
+    public var chunkLatencyMs: Double?
+    public var totalChunks: Int?
+    public var totalDurationMs: Double?
+    public var throughput: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case ttfcMs = "ttfc_ms"
+        case chunkIndex = "chunk_index"
+        case chunkLatencyMs = "chunk_latency_ms"
+        case totalChunks = "total_chunks"
+        case totalDurationMs = "total_duration_ms"
+        case throughput
+    }
+
+    public init(
+        ttfcMs: Double? = nil,
+        chunkIndex: Int? = nil,
+        chunkLatencyMs: Double? = nil,
+        totalChunks: Int? = nil,
+        totalDurationMs: Double? = nil,
+        throughput: Double? = nil
+    ) {
+        self.ttfcMs = ttfcMs
+        self.chunkIndex = chunkIndex
+        self.chunkLatencyMs = chunkLatencyMs
+        self.totalChunks = totalChunks
+        self.totalDurationMs = totalDurationMs
+        self.throughput = throughput
+    }
+}
+
+/// Request body for ``POST /api/v1/inference/events``.
+public struct InferenceEventRequest: Codable, Sendable {
+    public let deviceId: String
+    public let modelId: String
+    public let version: String
+    public let modality: String
+    public let sessionId: String
+    public let eventType: String
+    public let timestampMs: Int64
+    public var metrics: InferenceEventMetrics?
+    public var orgId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case modelId = "model_id"
+        case version
+        case modality
+        case sessionId = "session_id"
+        case eventType = "event_type"
+        case timestampMs = "timestamp_ms"
+        case metrics
+        case orgId = "org_id"
+    }
+
+    public init(
+        deviceId: String,
+        modelId: String,
+        version: String,
+        modality: String,
+        sessionId: String,
+        eventType: String,
+        timestampMs: Int64,
+        metrics: InferenceEventMetrics? = nil,
+        orgId: String? = nil
+    ) {
+        self.deviceId = deviceId
+        self.modelId = modelId
+        self.version = version
+        self.modality = modality
+        self.sessionId = sessionId
+        self.eventType = eventType
+        self.timestampMs = timestampMs
+        self.metrics = metrics
+        self.orgId = orgId
+    }
+}
