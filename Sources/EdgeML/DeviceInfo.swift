@@ -21,10 +21,10 @@ import CoreTelephony
 ///
 /// Example:
 /// ```swift
-/// let deviceInfo = DeviceInfo()
+/// let deviceInfo = DeviceMetadata()
 /// let registrationData = deviceInfo.toRegistrationDict()
 /// ```
-public class DeviceInfo {
+public class DeviceMetadata {
 
     // MARK: - Properties
 
