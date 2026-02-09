@@ -248,6 +248,22 @@ public actor APIClient {
         let _: EmptyResponse = try await performRequest(urlRequest)
     }
 
+    // MARK: - Inference Events
+
+    /// Reports a streaming inference event to the server.
+    /// - Parameter request: Inference event request.
+    public func reportInferenceEvent(_ request: InferenceEventRequest) async throws {
+        let url = serverURL.appendingPathComponent("api/v1/inference/events")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        try configureHeaders(&urlRequest)
+        urlRequest.httpBody = try jsonEncoder.encode(request)
+
+        let _: EmptyResponse = try await performRequest(urlRequest)
+    }
+
     // MARK: - Download
 
     /// Downloads data from a URL.

@@ -140,6 +140,44 @@ public final class EdgeMLModel: @unchecked Sendable {
             }
         }
     }
+
+    // MARK: - Streaming Inference
+
+    /// Streams generative inference output chunk-by-chunk.
+    ///
+    /// The returned ``AsyncThrowingStream`` yields ``InferenceChunk`` values
+    /// with per-chunk timing instrumentation.  After the stream completes,
+    /// call the companion `result` closure to obtain aggregated metrics.
+    ///
+    /// - Parameters:
+    ///   - input: Modality-specific input (e.g. a prompt string for text).
+    ///   - modality: The generation modality.
+    ///   - engine: A ``StreamingInferenceEngine`` (defaults to ``LLMEngine`` for text).
+    /// - Returns: An ``AsyncThrowingStream`` of ``InferenceChunk``.
+    public func generateStream(
+        input: Any,
+        modality: Modality,
+        engine: StreamingInferenceEngine? = nil
+    ) -> (stream: AsyncThrowingStream<InferenceChunk, Error>, result: @Sendable () -> StreamingInferenceResult?) {
+        let resolvedEngine: StreamingInferenceEngine
+        if let engine = engine {
+            resolvedEngine = engine
+        } else {
+            switch modality {
+            case .text:
+                resolvedEngine = LLMEngine(modelPath: compiledModelURL)
+            case .image:
+                resolvedEngine = ImageEngine(modelPath: compiledModelURL)
+            case .audio:
+                resolvedEngine = AudioEngine(modelPath: compiledModelURL)
+            case .video:
+                resolvedEngine = VideoEngine(modelPath: compiledModelURL)
+            }
+        }
+
+        let wrapper = InstrumentedStreamWrapper(modality: modality)
+        return wrapper.wrap(resolvedEngine, input: input)
+    }
 }
 
 // MARK: - Equatable

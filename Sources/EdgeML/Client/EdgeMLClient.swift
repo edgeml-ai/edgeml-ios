@@ -388,6 +388,91 @@ public final class EdgeMLClient: @unchecked Sendable {
         }
     }
 
+    // MARK: - Streaming Inference
+
+    /// Streams generative inference and auto-reports metrics to the server.
+    ///
+    /// - Parameters:
+    ///   - model: The model to run inference on.
+    ///   - input: Modality-specific input.
+    ///   - modality: The output modality.
+    ///   - engine: Optional custom engine. Defaults to a modality-appropriate engine.
+    /// - Returns: An ``AsyncThrowingStream`` of ``InferenceChunk``.
+    public func generateStream(
+        model: EdgeMLModel,
+        input: Any,
+        modality: Modality,
+        engine: StreamingInferenceEngine? = nil
+    ) -> AsyncThrowingStream<InferenceChunk, Error> {
+        let (stream, getResult) = model.generateStream(input: input, modality: modality, engine: engine)
+        let apiClient = self.apiClient
+        let deviceId = self.deviceId
+        let orgId = self.orgId
+        let sessionId = UUID().uuidString
+
+        // Report generation_started
+        if let deviceId = deviceId {
+            Task {
+                let event = InferenceEventRequest(
+                    deviceId: deviceId,
+                    modelId: model.id,
+                    version: model.version,
+                    modality: modality.rawValue,
+                    sessionId: sessionId,
+                    eventType: "generation_started",
+                    timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
+                    orgId: orgId
+                )
+                try? await apiClient.reportInferenceEvent(event)
+            }
+        }
+
+        // Wrap the stream to report completion
+        return AsyncThrowingStream<InferenceChunk, Error> { continuation in
+            let task = Task {
+                var failed = false
+                do {
+                    for try await chunk in stream {
+                        continuation.yield(chunk)
+                    }
+                } catch {
+                    failed = true
+                    continuation.finish(throwing: error)
+                }
+
+                if !failed {
+                    continuation.finish()
+                }
+
+                // Report completion event
+                if let deviceId = deviceId, let result = getResult() {
+                    let metrics = InferenceEventMetrics(
+                        ttfcMs: result.ttfcMs,
+                        totalChunks: result.totalChunks,
+                        totalDurationMs: result.totalDurationMs,
+                        throughput: result.throughput
+                    )
+                    let event = InferenceEventRequest(
+                        deviceId: deviceId,
+                        modelId: model.id,
+                        version: model.version,
+                        modality: modality.rawValue,
+                        sessionId: sessionId,
+                        eventType: failed ? "generation_failed" : "generation_completed",
+                        timestampMs: Int64(Date().timeIntervalSince1970 * 1000),
+                        metrics: metrics,
+                        orgId: orgId
+                    )
+                    try? await apiClient.reportInferenceEvent(event)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
     // MARK: - Training
 
     /// Participates in a federated training round.
