@@ -21,17 +21,85 @@ public struct DeviceTokenState: Codable {
     }
 }
 
+public protocol TokenStorage: Sendable {
+    func save(_ data: Data, service: String, account: String) throws
+    func load(service: String, account: String) throws -> Data
+    func clear(service: String, account: String) throws
+}
+
+public struct KeychainTokenStorage: TokenStorage {
+    public init() {}
+
+    public func save(_ data: Data, service: String, account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw NSError(domain: "EdgeML.DeviceAuth", code: Int(status), userInfo: [
+                NSLocalizedDescriptionKey: "Failed to store device token state in Keychain"
+            ])
+        }
+    }
+
+    public func load(service: String, account: String) throws -> Data {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else {
+            throw NSError(domain: "EdgeML.DeviceAuth", code: Int(status), userInfo: [
+                NSLocalizedDescriptionKey: "No device token state found in Keychain"
+            ])
+        }
+        return data
+    }
+
+    public func clear(service: String, account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            throw NSError(domain: "EdgeML.DeviceAuth", code: Int(status), userInfo: [
+                NSLocalizedDescriptionKey: "Failed to remove device token state from Keychain"
+            ])
+        }
+    }
+}
+
 public actor DeviceAuthManager {
     private let baseURL: URL
     private let orgId: String
     private let deviceIdentifier: String
     private let keychainService: String
+    private let storage: TokenStorage
 
-    public init(baseURL: URL, orgId: String, deviceIdentifier: String, keychainService: String = "ai.edgeml") {
+    public init(baseURL: URL, orgId: String, deviceIdentifier: String, keychainService: String = "ai.edgeml", storage: TokenStorage = KeychainTokenStorage()) {
         self.baseURL = baseURL
         self.orgId = orgId
         self.deviceIdentifier = deviceIdentifier
         self.keychainService = keychainService
+        self.storage = storage
     }
 
     private var storageAccount: String {
@@ -158,45 +226,11 @@ public actor DeviceAuthManager {
             try container.encode(ISO8601DateFormatter.withFractional.string(from: date))
         }
         let encoded = try encoder.encode(state)
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: storageAccount,
-        ]
-        SecItemDelete(query as CFDictionary)
-
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: storageAccount,
-            kSecValueData as String: encoded,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-        ]
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw NSError(domain: "EdgeML.DeviceAuth", code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to store device token state in Keychain"
-            ])
-        }
+        try storage.save(encoded, service: keychainService, account: storageAccount)
     }
 
     private func load() throws -> DeviceTokenState {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: storageAccount,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else {
-            throw NSError(domain: "EdgeML.DeviceAuth", code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "No device token state found in Keychain"
-            ])
-        }
+        let data = try storage.load(service: keychainService, account: storageAccount)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -212,17 +246,7 @@ public actor DeviceAuthManager {
     }
 
     private func clear() throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: storageAccount,
-        ]
-        let status = SecItemDelete(query as CFDictionary)
-        if status != errSecSuccess && status != errSecItemNotFound {
-            throw NSError(domain: "EdgeML.DeviceAuth", code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to remove device token state from Keychain"
-            ])
-        }
+        try storage.clear(service: keychainService, account: storageAccount)
     }
 }
 
