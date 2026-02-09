@@ -31,10 +31,14 @@ class EdgeMLDemoViewModel: ObservableObject {
     /// Replace with your actual API key and server URL
     private let apiKey = "your-api-key"
     private let orgId = "default"
-    // For a real device, replace localhost with your Mac's LAN IP (e.g., http://192.168.1.10:8000)
+    // For a real device, replace localhost with your Mac's LAN IP (e.g., 192.168.1.10)
+    private static let defaultHost = "localhost"
+    private static let defaultPort = 8000
     private let serverURL: URL = {
-        guard let url = URL(string: ProcessInfo.processInfo.environment["EDGEML_SERVER_URL"] ?? "http://localhost:8000") else {
-            fatalError("Invalid EDGEML_SERVER_URL")
+        let host = ProcessInfo.processInfo.environment["EDGEML_SERVER_HOST"] ?? defaultHost
+        let port = ProcessInfo.processInfo.environment["EDGEML_SERVER_PORT"].flatMap(Int.init) ?? defaultPort
+        guard let url = URL(string: "http://\(host):\(port)") else {
+            fatalError("Invalid EDGEML_SERVER_HOST or EDGEML_SERVER_PORT")
         }
         return url
     }()
@@ -414,5 +418,5 @@ class EmptyBatchProvider: MLBatchProvider {
 /// Placeholder feature provider used when sample input creation fails.
 private class EmptyFeatureProvider: MLFeatureProvider {
     var featureNames: Set<String> { [] }
-    func featureValue(for featureName: String) -> MLFeatureValue? { nil }
+    func featureValue(for _: String) -> MLFeatureValue? { nil }
 }

@@ -3,7 +3,8 @@ import XCTest
 @testable import EdgeML
 
 final class DeviceAuthManagerTests: XCTestCase {
-    private static let testBaseURL = URL(string: "https://api.example.com")!
+    private static let testHost = "api.example.com"
+    private static let testBaseURL = URL(string: "https://\(testHost)")!
 
     override func setUp() {
         super.setUp()
@@ -250,7 +251,7 @@ private final class MockURLProtocol: URLProtocol {
     static var requests: [URLRequest] = []
 
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == DeviceAuthManagerTests.testBaseURL.host
+        request.url?.host == DeviceAuthManagerTests.testHost
     }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {

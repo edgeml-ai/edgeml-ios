@@ -36,8 +36,11 @@ public final class EdgeMLClient: @unchecked Sendable {
 
     // MARK: - Constants
 
+    /// Default EdgeML server host.
+    public static let defaultServerHost = "api.edgeml.ai"
+
     /// Default EdgeML server URL.
-    public static let defaultServerURL = URL(string: "https://api.edgeml.ai")!
+    public static let defaultServerURL = URL(string: "https://\(defaultServerHost)")!
 
     // MARK: - Shared Instance
 

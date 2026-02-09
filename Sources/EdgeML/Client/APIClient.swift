@@ -6,7 +6,7 @@ public actor APIClient {
 
     // MARK: - API Paths
 
-    private static let latestVersionPath = "/latest"
+    private static let defaultVersionAlias = "latest"
 
     // MARK: - Properties
 
@@ -156,7 +156,7 @@ public actor APIClient {
         if let version = version {
             path += "/\(version)"
         } else {
-            path += Self.latestVersionPath
+            path += "/\(Self.defaultVersionAlias)"
         }
 
         var urlRequest = URLRequest(url: serverURL.appendingPathComponent(path))

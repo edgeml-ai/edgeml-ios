@@ -3,7 +3,8 @@ import XCTest
 
 final class EdgeMLClientTests: XCTestCase {
 
-    private static let testServerURL = URL(string: "https://api.example.com")!
+    private static let testHost = "api.example.com"
+    private static let testServerURL = URL(string: "https://\(testHost)")!
 
     // MARK: - Initialization Tests
 
