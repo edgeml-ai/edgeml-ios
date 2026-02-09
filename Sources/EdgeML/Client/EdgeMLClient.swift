@@ -34,6 +34,14 @@ import UIKit
 /// ```
 public final class EdgeMLClient: @unchecked Sendable {
 
+    // MARK: - Constants
+
+    /// Default EdgeML server host.
+    public static let defaultServerHost = "api.edgeml.ai"
+
+    /// Default EdgeML server URL.
+    public static let defaultServerURL = URL(string: "https://\(defaultServerHost)")!
+
     // MARK: - Shared Instance
 
     /// Shared instance for background operations.
@@ -87,8 +95,8 @@ public final class EdgeMLClient: @unchecked Sendable {
     public init(
         deviceAccessToken: String,
         orgId: String,
-        serverURL: URL = URL(string: "https://api.edgeml.ai")!,
-        configuration: EdgeMLConfiguration = .default,
+        serverURL: URL = EdgeMLClient.defaultServerURL,
+        configuration: EdgeMLConfiguration = .standard,
         heartbeatInterval: TimeInterval = 300
     ) {
         self.orgId = orgId
@@ -159,7 +167,7 @@ public final class EdgeMLClient: @unchecked Sendable {
         let identifier = deviceIdentifier ?? generateDeviceIdentifier()
         self.clientDeviceIdentifier = identifier
 
-        let deviceInfo = await buildDeviceInfo(appVersion: appVersion)
+        let deviceInfo = await buildDeviceInfo()
 
         let capabilities = DeviceCapabilities(
             supportsTraining: deviceInfo.supportsTraining,
@@ -498,7 +506,7 @@ public final class EdgeMLClient: @unchecked Sendable {
     public func participateInRound(
         modelId: String,
         dataProvider: @escaping () -> MLBatchProvider,
-        config: TrainingConfig = .default
+        config: TrainingConfig = .standard
     ) async throws -> RoundResult {
         guard let deviceId = self.deviceId else {
             throw EdgeMLError.deviceNotRegistered
@@ -572,7 +580,7 @@ public final class EdgeMLClient: @unchecked Sendable {
     public func trainLocal(
         model: EdgeMLModel,
         data: MLBatchProvider,
-        config: TrainingConfig = .default
+        config: TrainingConfig = .standard
     ) async throws -> TrainingResult {
         let trainer = FederatedTrainer(configuration: configuration)
         return try await trainer.train(
@@ -598,7 +606,7 @@ public final class EdgeMLClient: @unchecked Sendable {
     public func enableBackgroundTraining(
         modelId: String,
         dataProvider: @escaping @Sendable () -> MLBatchProvider,
-        constraints: BackgroundConstraints = .default
+        constraints: BackgroundConstraints = .standard
     ) {
         let sync = BackgroundSync.shared
         sync.configure(
@@ -661,7 +669,7 @@ public final class EdgeMLClient: @unchecked Sendable {
         let hasNeuralEngine: Bool
     }
 
-    private func buildDeviceInfo(appVersion: String?) async -> LocalDeviceInfo {
+    private func buildDeviceInfo() async -> LocalDeviceInfo {
         var availableStorageMb: Int? = nil
         var totalMemoryMb: Int? = nil
         let deviceModel: String

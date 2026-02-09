@@ -43,7 +43,9 @@ struct ContentView: View {
             }
             .navigationTitle("EdgeML Demo")
             .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) {}
+                Button("OK", role: .cancel) {
+                    // No action needed — dismisses the alert via isPresented binding
+                }
             } message: {
                 Text(viewModel.errorMessage)
             }

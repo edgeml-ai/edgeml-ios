@@ -47,7 +47,7 @@ public struct PrivacyConfiguration {
     }
 
     /// Default privacy configuration (staggered updates enabled, DP disabled).
-    public static let `default` = PrivacyConfiguration()
+    public static let standard = PrivacyConfiguration()
 
     /// High privacy configuration (staggered updates + differential privacy).
     public static let highPrivacy = PrivacyConfiguration(

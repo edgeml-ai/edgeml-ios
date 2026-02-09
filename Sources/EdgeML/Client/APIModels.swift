@@ -488,7 +488,7 @@ public struct TrainingConfig: Codable, Sendable {
     }
 
     /// Default training configuration.
-    public static let `default` = TrainingConfig()
+    public static let standard = TrainingConfig()
 }
 
 /// Result of a training round.

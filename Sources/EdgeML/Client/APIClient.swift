@@ -4,6 +4,10 @@ import os.log
 /// HTTP client for communicating with the EdgeML server API.
 public actor APIClient {
 
+    // MARK: - API Paths
+
+    private static let defaultVersionAlias = "latest"
+
     // MARK: - Properties
 
     private let serverURL: URL
@@ -152,7 +156,7 @@ public actor APIClient {
         if let version = version {
             path += "/\(version)"
         } else {
-            path += "/latest"
+            path += "/\(Self.defaultVersionAlias)"
         }
 
         var urlRequest = URLRequest(url: serverURL.appendingPathComponent(path))

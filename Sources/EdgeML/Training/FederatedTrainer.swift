@@ -214,7 +214,7 @@ public actor FederatedTrainer {
         }
     }
 
-    private func configureTrainingParameters(config: TrainingConfig) throws -> MLModelConfiguration {
+    private func configureTrainingParameters(config _: TrainingConfig) throws -> MLModelConfiguration {
         let modelConfig = MLModelConfiguration()
         modelConfig.computeUnits = .all
 
@@ -233,7 +233,7 @@ public actor FederatedTrainer {
         return nil
     }
 
-    private func extractAccuracy(from context: MLUpdateContext) -> Double? {
+    private func extractAccuracy(from _: MLUpdateContext) -> Double? {
         // Check if accuracy metric is available
         // This depends on the model's configuration
         return nil

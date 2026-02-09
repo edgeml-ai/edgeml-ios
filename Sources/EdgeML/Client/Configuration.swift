@@ -3,22 +3,71 @@ import Foundation
 /// Configuration options for the EdgeML SDK.
 public struct EdgeMLConfiguration: Sendable {
 
-    // MARK: - Properties
+    // MARK: - Sub-configurations
 
-    /// Maximum number of retry attempts for failed requests.
-    public let maxRetryAttempts: Int
+    /// Network-related settings for API communication.
+    public struct NetworkPolicy: Sendable {
+        /// Maximum number of retry attempts for failed requests.
+        public let maxRetryAttempts: Int
+        /// Timeout interval for API requests in seconds.
+        public let requestTimeout: TimeInterval
+        /// Timeout interval for model downloads in seconds.
+        public let downloadTimeout: TimeInterval
+        /// Whether to require WiFi for model downloads.
+        public let requireWiFiForDownload: Bool
 
-    /// Timeout interval for API requests in seconds.
-    public let requestTimeout: TimeInterval
+        public init(
+            maxRetryAttempts: Int = 3,
+            requestTimeout: TimeInterval = 30,
+            downloadTimeout: TimeInterval = 300,
+            requireWiFiForDownload: Bool = false
+        ) {
+            self.maxRetryAttempts = maxRetryAttempts
+            self.requestTimeout = requestTimeout
+            self.downloadTimeout = downloadTimeout
+            self.requireWiFiForDownload = requireWiFiForDownload
+        }
+    }
 
-    /// Timeout interval for model downloads in seconds.
-    public let downloadTimeout: TimeInterval
+    /// Logging-related settings.
+    public struct LoggingPolicy: Sendable {
+        /// Whether to enable debug logging.
+        public let enableLogging: Bool
+        /// Log level for SDK operations.
+        public let logLevel: LogLevel
 
-    /// Whether to enable debug logging.
-    public let enableLogging: Bool
+        public init(
+            enableLogging: Bool = false,
+            logLevel: LogLevel = .info
+        ) {
+            self.enableLogging = enableLogging
+            self.logLevel = logLevel
+        }
+    }
 
-    /// Log level for SDK operations.
-    public let logLevel: LogLevel
+    /// Training-related device constraints.
+    public struct TrainingPolicy: Sendable {
+        /// Whether to require charging for background training.
+        public let requireChargingForTraining: Bool
+        /// Minimum battery level required for background training (0.0 - 1.0).
+        public let minimumBatteryLevel: Float
+
+        public init(
+            requireChargingForTraining: Bool = true,
+            minimumBatteryLevel: Float = 0.2
+        ) {
+            self.requireChargingForTraining = requireChargingForTraining
+            self.minimumBatteryLevel = minimumBatteryLevel
+        }
+    }
+
+    // MARK: - Stored Properties
+
+    /// Network policy configuration.
+    public let network: NetworkPolicy
+
+    /// Logging configuration.
+    public let logging: LoggingPolicy
 
     /// Maximum size of the model cache in bytes.
     public let maxCacheSize: UInt64
@@ -29,17 +78,37 @@ public struct EdgeMLConfiguration: Sendable {
     /// Interval for checking model updates in seconds.
     public let updateCheckInterval: TimeInterval
 
-    /// Whether to require WiFi for model downloads.
-    public let requireWiFiForDownload: Bool
-
-    /// Whether to require charging for background training.
-    public let requireChargingForTraining: Bool
-
-    /// Minimum battery level required for background training (0.0 - 1.0).
-    public let minimumBatteryLevel: Float
+    /// Training device constraints.
+    public let training: TrainingPolicy
 
     /// Privacy configuration for upload behavior and differential privacy.
     public let privacyConfiguration: PrivacyConfiguration
+
+    // MARK: - Backward-Compatible Accessors
+
+    /// Maximum number of retry attempts for failed requests.
+    public var maxRetryAttempts: Int { network.maxRetryAttempts }
+
+    /// Timeout interval for API requests in seconds.
+    public var requestTimeout: TimeInterval { network.requestTimeout }
+
+    /// Timeout interval for model downloads in seconds.
+    public var downloadTimeout: TimeInterval { network.downloadTimeout }
+
+    /// Whether to require WiFi for model downloads.
+    public var requireWiFiForDownload: Bool { network.requireWiFiForDownload }
+
+    /// Whether to enable debug logging.
+    public var enableLogging: Bool { logging.enableLogging }
+
+    /// Log level for SDK operations.
+    public var logLevel: LogLevel { logging.logLevel }
+
+    /// Whether to require charging for background training.
+    public var requireChargingForTraining: Bool { training.requireChargingForTraining }
+
+    /// Minimum battery level required for background training (0.0 - 1.0).
+    public var minimumBatteryLevel: Float { training.minimumBatteryLevel }
 
     // MARK: - Log Level
 
@@ -57,79 +126,115 @@ public struct EdgeMLConfiguration: Sendable {
 
     /// Creates a new configuration with the specified options.
     /// - Parameters:
-    ///   - maxRetryAttempts: Maximum number of retry attempts for failed requests.
-    ///   - requestTimeout: Timeout interval for API requests in seconds.
-    ///   - downloadTimeout: Timeout interval for model downloads in seconds.
-    ///   - enableLogging: Whether to enable debug logging.
-    ///   - logLevel: Log level for SDK operations.
+    ///   - network: Network policy configuration.
+    ///   - logging: Logging configuration.
     ///   - maxCacheSize: Maximum size of the model cache in bytes.
     ///   - autoCheckUpdates: Whether to automatically check for model updates.
     ///   - updateCheckInterval: Interval for checking model updates in seconds.
-    ///   - requireWiFiForDownload: Whether to require WiFi for model downloads.
-    ///   - requireChargingForTraining: Whether to require charging for background training.
-    ///   - minimumBatteryLevel: Minimum battery level required for background training.
+    ///   - training: Training device constraints.
     ///   - privacyConfiguration: Privacy configuration for uploads and differential privacy.
+    public init(
+        network: NetworkPolicy = NetworkPolicy(),
+        logging: LoggingPolicy = LoggingPolicy(),
+        maxCacheSize: UInt64 = 500 * 1024 * 1024, // 500 MB
+        autoCheckUpdates: Bool = true,
+        updateCheckInterval: TimeInterval = 3600, // 1 hour
+        training: TrainingPolicy = TrainingPolicy(),
+        privacyConfiguration: PrivacyConfiguration = .standard
+    ) {
+        self.network = network
+        self.logging = logging
+        self.maxCacheSize = maxCacheSize
+        self.autoCheckUpdates = autoCheckUpdates
+        self.updateCheckInterval = updateCheckInterval
+        self.training = training
+        self.privacyConfiguration = privacyConfiguration
+    }
+
+    // MARK: - Convenience Initializer (flat parameters)
+
+    /// Creates a new configuration with flat parameters for convenience.
     public init(
         maxRetryAttempts: Int = 3,
         requestTimeout: TimeInterval = 30,
         downloadTimeout: TimeInterval = 300,
         enableLogging: Bool = false,
         logLevel: LogLevel = .info,
-        maxCacheSize: UInt64 = 500 * 1024 * 1024, // 500 MB
+        maxCacheSize: UInt64 = 500 * 1024 * 1024,
         autoCheckUpdates: Bool = true,
-        updateCheckInterval: TimeInterval = 3600, // 1 hour
+        updateCheckInterval: TimeInterval = 3600,
         requireWiFiForDownload: Bool = false,
         requireChargingForTraining: Bool = true,
         minimumBatteryLevel: Float = 0.2,
-        privacyConfiguration: PrivacyConfiguration = .default
+        privacyConfiguration: PrivacyConfiguration = .standard
     ) {
-        self.maxRetryAttempts = maxRetryAttempts
-        self.requestTimeout = requestTimeout
-        self.downloadTimeout = downloadTimeout
-        self.enableLogging = enableLogging
-        self.logLevel = logLevel
-        self.maxCacheSize = maxCacheSize
-        self.autoCheckUpdates = autoCheckUpdates
-        self.updateCheckInterval = updateCheckInterval
-        self.requireWiFiForDownload = requireWiFiForDownload
-        self.requireChargingForTraining = requireChargingForTraining
-        self.minimumBatteryLevel = minimumBatteryLevel
-        self.privacyConfiguration = privacyConfiguration
+        self.init(
+            network: NetworkPolicy(
+                maxRetryAttempts: maxRetryAttempts,
+                requestTimeout: requestTimeout,
+                downloadTimeout: downloadTimeout,
+                requireWiFiForDownload: requireWiFiForDownload
+            ),
+            logging: LoggingPolicy(
+                enableLogging: enableLogging,
+                logLevel: logLevel
+            ),
+            maxCacheSize: maxCacheSize,
+            autoCheckUpdates: autoCheckUpdates,
+            updateCheckInterval: updateCheckInterval,
+            training: TrainingPolicy(
+                requireChargingForTraining: requireChargingForTraining,
+                minimumBatteryLevel: minimumBatteryLevel
+            ),
+            privacyConfiguration: privacyConfiguration
+        )
     }
 
     // MARK: - Presets
 
     /// Default configuration suitable for most use cases.
-    public static let `default` = EdgeMLConfiguration()
+    public static let standard = EdgeMLConfiguration()
 
     /// Configuration optimized for development and testing.
     public static let development = EdgeMLConfiguration(
-        maxRetryAttempts: 1,
-        requestTimeout: 60,
-        downloadTimeout: 600,
-        enableLogging: true,
-        logLevel: .debug,
+        network: NetworkPolicy(
+            maxRetryAttempts: 1,
+            requestTimeout: 60,
+            downloadTimeout: 600,
+            requireWiFiForDownload: false
+        ),
+        logging: LoggingPolicy(
+            enableLogging: true,
+            logLevel: .debug
+        ),
         maxCacheSize: 1024 * 1024 * 1024, // 1 GB
         autoCheckUpdates: true,
         updateCheckInterval: 300, // 5 minutes
-        requireWiFiForDownload: false,
-        requireChargingForTraining: false,
-        minimumBatteryLevel: 0.1
+        training: TrainingPolicy(
+            requireChargingForTraining: false,
+            minimumBatteryLevel: 0.1
+        )
     )
 
     /// Configuration optimized for production with conservative settings.
     public static let production = EdgeMLConfiguration(
-        maxRetryAttempts: 5,
-        requestTimeout: 30,
-        downloadTimeout: 300,
-        enableLogging: false,
-        logLevel: .error,
+        network: NetworkPolicy(
+            maxRetryAttempts: 5,
+            requestTimeout: 30,
+            downloadTimeout: 300,
+            requireWiFiForDownload: true
+        ),
+        logging: LoggingPolicy(
+            enableLogging: false,
+            logLevel: .error
+        ),
         maxCacheSize: 200 * 1024 * 1024, // 200 MB
         autoCheckUpdates: true,
         updateCheckInterval: 86400, // 24 hours
-        requireWiFiForDownload: true,
-        requireChargingForTraining: true,
-        minimumBatteryLevel: 0.3
+        training: TrainingPolicy(
+            requireChargingForTraining: true,
+            minimumBatteryLevel: 0.3
+        )
     )
 }
 
@@ -169,7 +274,7 @@ public struct BackgroundConstraints: Sendable {
     }
 
     /// Default constraints suitable for most use cases.
-    public static let `default` = BackgroundConstraints()
+    public static let standard = BackgroundConstraints()
 
     /// Relaxed constraints for development.
     public static let relaxed = BackgroundConstraints(

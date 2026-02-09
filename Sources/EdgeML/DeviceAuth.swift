@@ -90,6 +90,13 @@ public struct KeychainTokenStorage: TokenStorage {
 }
 
 public actor DeviceAuthManager {
+    private static let apiVersion = "v1"
+    private static let authService = "device-auth"
+
+    private static func authPath(_ action: String) -> String {
+        "/api/\(apiVersion)/\(authService)/\(action)"
+    }
+
     private let baseURL: URL
     private let orgId: String
     private let deviceIdentifier: String
@@ -127,7 +134,7 @@ public actor DeviceAuthManager {
         }
 
         let data = try await postJSON(
-            path: "/api/v1/device-auth/bootstrap",
+            path: Self.authPath("bootstrap"),
             jsonBody: payload,
             bearerToken: bootstrapBearerToken,
             expectedStatusCodes: [200, 201]
@@ -140,7 +147,7 @@ public actor DeviceAuthManager {
     public func refresh() async throws -> DeviceTokenState {
         let current = try load()
         let data = try await postJSON(
-            path: "/api/v1/device-auth/refresh",
+            path: Self.authPath("refresh"),
             jsonBody: ["refresh_token": current.refreshToken],
             bearerToken: nil,
             expectedStatusCodes: [200]
@@ -156,7 +163,7 @@ public actor DeviceAuthManager {
         }
 
         _ = try await postJSON(
-            path: "/api/v1/device-auth/revoke",
+            path: Self.authPath("revoke"),
             jsonBody: ["refresh_token": current.refreshToken, "reason": reason],
             bearerToken: nil,
             expectedStatusCodes: [200, 204]
