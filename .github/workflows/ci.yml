@@ -8,85 +8,66 @@ on:
 
 jobs:
   test:
-    name: Test Swift ${{ matrix.swift-version }}
-    runs-on: macos-14
-    strategy:
-      matrix:
-        swift-version: ["5.9", "5.10"]
+    name: Test
+    runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - name: Select Xcode version
-        run: |
-          if [ "${{ matrix.swift-version }}" == "5.10" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.3.app
-          else
-            sudo xcode-select -s /Applications/Xcode_15.2.app
-          fi
-
       - name: Build
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' build
+          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 16' build
 
       - name: Run tests with coverage
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
+          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 16' -enableCodeCoverage YES -resultBundlePath TestResults test
 
       - name: Generate coverage report
         run: |
           xcrun xccov view --report --json TestResults.xcresult > coverage.json
-          # Convert to lcov format for Codecov
-          brew install xcbeautify
           xcrun xccov view --report TestResults.xcresult
 
       - name: Upload coverage to Codecov
-        if: matrix.swift-version == '5.10'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
-          file: ./coverage.lcov
+          file: ./coverage.json
           flags: swift
-          name: swift-${{ matrix.swift-version }}
           token: ${{ secrets.CODECOV_TOKEN }}
 
   sonarcloud:
     name: SonarCloud Analysis
-    runs-on: macos-14
+    runs-on: macos-15
     needs: test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.3.app
-
       - name: Run tests with coverage
         run: |
-          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
+          xcodebuild -scheme EdgeML -destination 'platform=iOS Simulator,name=iPhone 16' -enableCodeCoverage YES -resultBundlePath TestResults test
 
       - name: Generate coverage report for SonarCloud
         run: |
           xcrun xccov view --report --json TestResults.xcresult > coverage.json
-          # Convert to lcov for SonarCloud
-          brew install xcbeautify
           xcrun xccov view --report TestResults.xcresult
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
   security:
     name: Security Scan
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Run SwiftLint
         run: |
@@ -94,7 +75,7 @@ jobs:
           swiftlint lint --reporter json > swiftlint-report.json || true
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: security-reports
           path: swiftlint-report.json
