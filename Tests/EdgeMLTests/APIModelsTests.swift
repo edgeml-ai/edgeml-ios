@@ -702,4 +702,354 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(decoded["double"]?.value as? Double, 3.14)
         XCTAssertEqual(decoded["bool"]?.value as? Bool, true)
     }
+
+    // MARK: - InferenceEventRequest custom encode/decode (flattened context)
+
+    func testInferenceEventRequestFlattenedEncoding() throws {
+        let context = InferenceEventContext(
+            deviceId: "dev-1",
+            modelId: "mod-1",
+            version: "2.0",
+            modality: "image",
+            sessionId: "sess-1"
+        )
+        let request = InferenceEventRequest(
+            context: context,
+            eventType: "generation_completed",
+            timestampMs: 1234567890,
+            orgId: "org-99"
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        // Context fields should be flattened into top-level JSON
+        XCTAssertEqual(json["device_id"] as? String, "dev-1")
+        XCTAssertEqual(json["model_id"] as? String, "mod-1")
+        XCTAssertEqual(json["version"] as? String, "2.0")
+        XCTAssertEqual(json["modality"] as? String, "image")
+        XCTAssertEqual(json["session_id"] as? String, "sess-1")
+        XCTAssertEqual(json["event_type"] as? String, "generation_completed")
+        XCTAssertEqual(json["timestamp_ms"] as? Int64, 1234567890)
+        XCTAssertEqual(json["org_id"] as? String, "org-99")
+
+        // There should be NO nested "context" key
+        XCTAssertNil(json["context"])
+    }
+
+    func testInferenceEventRequestFlattenedDecoding() throws {
+        // JSON with context fields at top level (flattened)
+        let json = """
+        {
+            "device_id": "d2",
+            "model_id": "m2",
+            "version": "3.0",
+            "modality": "audio",
+            "session_id": "s2",
+            "event_type": "generation_started",
+            "timestamp_ms": 9999999,
+            "org_id": "org-42"
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(InferenceEventRequest.self, from: json.data(using: .utf8)!)
+
+        XCTAssertEqual(decoded.context.deviceId, "d2")
+        XCTAssertEqual(decoded.context.modelId, "m2")
+        XCTAssertEqual(decoded.context.version, "3.0")
+        XCTAssertEqual(decoded.context.modality, "audio")
+        XCTAssertEqual(decoded.context.sessionId, "s2")
+        XCTAssertEqual(decoded.eventType, "generation_started")
+        XCTAssertEqual(decoded.timestampMs, 9999999)
+        XCTAssertEqual(decoded.orgId, "org-42")
+    }
+
+    func testInferenceEventRequestRoundTripPreservesContext() throws {
+        let context = InferenceEventContext(
+            deviceId: "dev-rt",
+            modelId: "mod-rt",
+            version: "1.5",
+            modality: "text",
+            sessionId: "sess-rt"
+        )
+        let metrics = InferenceEventMetrics(
+            ttfcMs: 100.0,
+            totalChunks: 50,
+            totalDurationMs: 2000.0,
+            throughput: 25.0
+        )
+        let original = InferenceEventRequest(
+            context: context,
+            eventType: "generation_completed",
+            timestampMs: 5555555,
+            metrics: metrics,
+            orgId: "org-rt"
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(InferenceEventRequest.self, from: data)
+
+        XCTAssertEqual(decoded.context.deviceId, "dev-rt")
+        XCTAssertEqual(decoded.context.modelId, "mod-rt")
+        XCTAssertEqual(decoded.context.version, "1.5")
+        XCTAssertEqual(decoded.context.modality, "text")
+        XCTAssertEqual(decoded.context.sessionId, "sess-rt")
+        XCTAssertEqual(decoded.eventType, "generation_completed")
+        XCTAssertEqual(decoded.timestampMs, 5555555)
+        XCTAssertEqual(decoded.metrics?.ttfcMs, 100.0)
+        XCTAssertEqual(decoded.metrics?.totalChunks, 50)
+        XCTAssertEqual(decoded.orgId, "org-rt")
+    }
+
+    func testInferenceEventRequestWithoutOptionalFields() throws {
+        let json = """
+        {
+            "device_id": "d3",
+            "model_id": "m3",
+            "version": "1.0",
+            "modality": "text",
+            "session_id": "s3",
+            "event_type": "generation_started",
+            "timestamp_ms": 1000
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(InferenceEventRequest.self, from: json.data(using: .utf8)!)
+
+        XCTAssertNil(decoded.metrics)
+        XCTAssertNil(decoded.orgId)
+    }
+
+    // MARK: - InferenceEventContext
+
+    func testInferenceEventContextRoundTrip() throws {
+        let original = InferenceEventContext(
+            deviceId: "d-ctx",
+            modelId: "m-ctx",
+            version: "4.0",
+            modality: "video",
+            sessionId: "s-ctx"
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(InferenceEventContext.self, from: data)
+
+        XCTAssertEqual(decoded.deviceId, original.deviceId)
+        XCTAssertEqual(decoded.modelId, original.modelId)
+        XCTAssertEqual(decoded.version, original.version)
+        XCTAssertEqual(decoded.modality, original.modality)
+        XCTAssertEqual(decoded.sessionId, original.sessionId)
+    }
+
+    func testInferenceEventContextCodingKeys() throws {
+        let context = InferenceEventContext(
+            deviceId: "d",
+            modelId: "m",
+            version: "v",
+            modality: "text",
+            sessionId: "s"
+        )
+
+        let data = try JSONEncoder().encode(context)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNotNil(json["device_id"])
+        XCTAssertNotNil(json["model_id"])
+        XCTAssertNotNil(json["session_id"])
+    }
+
+    // MARK: - DeviceInfo decoding
+
+    func testDeviceInfoDecoding() throws {
+        let json = """
+        {
+            "id": "dev-uuid-1",
+            "device_identifier": "idfv-abc",
+            "org_id": "org-1",
+            "platform": "ios",
+            "os_version": "17.0",
+            "sdk_version": "1.0.0",
+            "app_version": "2.0.0",
+            "status": "active",
+            "manufacturer": "Apple",
+            "model": "iPhone 15",
+            "cpu_architecture": "arm64",
+            "gpu_available": true,
+            "total_memory_mb": 6144,
+            "available_storage_mb": 25600,
+            "locale": "en_US",
+            "region": "US",
+            "timezone": "America/Los_Angeles",
+            "last_heartbeat": "2026-02-09T12:00:00Z",
+            "heartbeat_interval_seconds": 300,
+            "capabilities": {"neural_engine": "true"},
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-02-09T12:00:00Z"
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let info = try decoder.decode(DeviceInfo.self, from: json.data(using: .utf8)!)
+
+        XCTAssertEqual(info.id, "dev-uuid-1")
+        XCTAssertEqual(info.deviceIdentifier, "idfv-abc")
+        XCTAssertEqual(info.orgId, "org-1")
+        XCTAssertEqual(info.platform, "ios")
+        XCTAssertEqual(info.osVersion, "17.0")
+        XCTAssertEqual(info.sdkVersion, "1.0.0")
+        XCTAssertEqual(info.appVersion, "2.0.0")
+        XCTAssertEqual(info.status, "active")
+        XCTAssertEqual(info.manufacturer, "Apple")
+        XCTAssertEqual(info.model, "iPhone 15")
+        XCTAssertEqual(info.cpuArchitecture, "arm64")
+        XCTAssertTrue(info.gpuAvailable)
+        XCTAssertEqual(info.totalMemoryMb, 6144)
+        XCTAssertEqual(info.availableStorageMb, 25600)
+        XCTAssertEqual(info.locale, "en_US")
+        XCTAssertEqual(info.region, "US")
+        XCTAssertEqual(info.timezone, "America/Los_Angeles")
+        XCTAssertNotNil(info.lastHeartbeat)
+        XCTAssertEqual(info.heartbeatIntervalSeconds, 300)
+        XCTAssertNotNil(info.capabilities)
+    }
+
+    func testDeviceInfoDecodingWithNulls() throws {
+        let json = """
+        {
+            "id": "dev-uuid-2",
+            "device_identifier": "idfv-xyz",
+            "org_id": "org-2",
+            "platform": "ios",
+            "os_version": null,
+            "sdk_version": null,
+            "app_version": null,
+            "status": "inactive",
+            "manufacturer": null,
+            "model": null,
+            "cpu_architecture": null,
+            "gpu_available": false,
+            "total_memory_mb": null,
+            "available_storage_mb": null,
+            "locale": null,
+            "region": null,
+            "timezone": null,
+            "last_heartbeat": null,
+            "heartbeat_interval_seconds": 600,
+            "capabilities": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let info = try decoder.decode(DeviceInfo.self, from: json.data(using: .utf8)!)
+
+        XCTAssertNil(info.osVersion)
+        XCTAssertNil(info.sdkVersion)
+        XCTAssertNil(info.appVersion)
+        XCTAssertNil(info.manufacturer)
+        XCTAssertNil(info.model)
+        XCTAssertNil(info.cpuArchitecture)
+        XCTAssertFalse(info.gpuAvailable)
+        XCTAssertNil(info.totalMemoryMb)
+        XCTAssertNil(info.lastHeartbeat)
+        XCTAssertNil(info.capabilities)
+        XCTAssertEqual(info.heartbeatIntervalSeconds, 600)
+    }
+
+    // MARK: - ModelVersionResponse decoding
+
+    func testModelVersionResponseDecoding() throws {
+        let json = """
+        {
+            "model_id": "fraud-v2",
+            "version": "2.1.0",
+            "checksum": "sha256:abc123",
+            "size_bytes": 52428800,
+            "format": "coreml",
+            "description": "Improved fraud detection",
+            "created_at": "2026-02-01T00:00:00Z",
+            "metrics": {"accuracy": 0.95, "f1": 0.93}
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(ModelVersionResponse.self, from: json.data(using: .utf8)!)
+
+        XCTAssertEqual(response.modelId, "fraud-v2")
+        XCTAssertEqual(response.version, "2.1.0")
+        XCTAssertEqual(response.checksum, "sha256:abc123")
+        XCTAssertEqual(response.sizeBytes, 52428800)
+        XCTAssertEqual(response.format, "coreml")
+        XCTAssertEqual(response.description, "Improved fraud detection")
+        XCTAssertNotNil(response.metrics)
+        XCTAssertEqual(response.metrics?["accuracy"]?.value as? Double, 0.95)
+    }
+
+    func testModelVersionResponseNullOptionals() throws {
+        let json = """
+        {
+            "model_id": "basic",
+            "version": "1.0.0",
+            "checksum": "abc",
+            "size_bytes": 1024,
+            "format": "onnx",
+            "description": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "metrics": null
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(ModelVersionResponse.self, from: json.data(using: .utf8)!)
+
+        XCTAssertNil(response.description)
+        XCTAssertNil(response.metrics)
+    }
+
+    // MARK: - DeviceInfoRequest encoding
+
+    func testDeviceInfoRequestEncoding() throws {
+        let request = DeviceInfoRequest(
+            manufacturer: "Apple",
+            model: "iPhone 15 Pro",
+            cpuArchitecture: "arm64",
+            gpuAvailable: true,
+            totalMemoryMb: 8192,
+            availableStorageMb: 50000
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["manufacturer"] as? String, "Apple")
+        XCTAssertEqual(json["model"] as? String, "iPhone 15 Pro")
+        XCTAssertEqual(json["cpu_architecture"] as? String, "arm64")
+        XCTAssertEqual(json["gpu_available"] as? Bool, true)
+        XCTAssertEqual(json["total_memory_mb"] as? Int, 8192)
+        XCTAssertEqual(json["available_storage_mb"] as? Int, 50000)
+    }
+
+    // MARK: - TrackingEvent encoding
+
+    func testTrackingEventEncoding() throws {
+        let event = TrackingEvent(
+            name: "model_loaded",
+            properties: ["model_id": "test"],
+            timestamp: Date(timeIntervalSince1970: 1700000000)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["name"] as? String, "model_loaded")
+        XCTAssertNotNil(json["properties"])
+        XCTAssertNotNil(json["timestamp"])
+    }
 }

@@ -9,7 +9,7 @@ public actor ModelManager {
     // MARK: - Properties
 
     private let apiClient: APIClient
-    private let modelCache: ModelCache
+    private let modelCache: any ModelCaching
     private let configuration: EdgeMLConfiguration
     private let logger: Logger
     private let fileManager = FileManager.default
@@ -26,6 +26,18 @@ public actor ModelManager {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = ModelCache(maxSize: configuration.maxCacheSize)
+        self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "ModelManager")
+    }
+
+    /// Creates a new model manager with an injected cache (for testing).
+    /// - Parameters:
+    ///   - apiClient: API client for server communication.
+    ///   - configuration: SDK configuration.
+    ///   - modelCache: Cache implementation.
+    internal init(apiClient: APIClient, configuration: EdgeMLConfiguration, modelCache: any ModelCaching) {
+        self.apiClient = apiClient
+        self.configuration = configuration
+        self.modelCache = modelCache
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "ModelManager")
     }
 

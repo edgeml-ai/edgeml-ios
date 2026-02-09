@@ -49,6 +49,27 @@ public actor APIClient {
         self.jsonEncoder.dateEncodingStrategy = .iso8601
     }
 
+    /// Creates an API client with an injected URL session configuration (for testing).
+    internal init(
+        serverURL: URL,
+        configuration: EdgeMLConfiguration,
+        sessionConfiguration: URLSessionConfiguration
+    ) {
+        self.serverURL = serverURL
+        self.configuration = configuration
+        self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "APIClient")
+
+        sessionConfiguration.timeoutIntervalForRequest = configuration.requestTimeout
+        sessionConfiguration.timeoutIntervalForResource = configuration.downloadTimeout
+        self.session = URLSession(configuration: sessionConfiguration)
+
+        self.jsonDecoder = JSONDecoder()
+        self.jsonDecoder.dateDecodingStrategy = .iso8601
+
+        self.jsonEncoder = JSONEncoder()
+        self.jsonEncoder.dateEncodingStrategy = .iso8601
+    }
+
     // MARK: - Token Management
 
     /// Sets the short-lived device access token for authenticated requests.

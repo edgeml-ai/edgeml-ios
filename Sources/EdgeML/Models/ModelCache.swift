@@ -1,8 +1,18 @@
 import Foundation
 import os.log
 
+/// Protocol for model caching operations.
+protocol ModelCaching: Sendable {
+    func get(modelId: String, version: String) -> EdgeMLModel?
+    func getLatest(modelId: String) -> EdgeMLModel?
+    func store(_ model: EdgeMLModel)
+    func cacheCompiledModel(modelId: String, version: String, compiledURL: URL) async throws -> URL
+    func clearAll() throws
+    var currentSize: UInt64 { get }
+}
+
 /// Manages the local cache of downloaded models.
-public final class ModelCache: @unchecked Sendable {
+public final class ModelCache: ModelCaching, @unchecked Sendable {
 
     // MARK: - Properties
 

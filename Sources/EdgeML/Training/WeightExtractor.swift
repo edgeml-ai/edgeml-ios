@@ -165,7 +165,7 @@ actor WeightExtractor {
     }
 
     /// Computes delta between original and updated weights.
-    private func computeDelta(
+    func computeDelta(
         original: [String: MLMultiArray],
         updated: [String: MLMultiArray]
     ) -> [String: MLMultiArray] {
@@ -188,7 +188,7 @@ actor WeightExtractor {
     }
 
     /// Subtracts two MLMultiArrays element-wise.
-    private func subtractArrays(_ a: MLMultiArray, _ b: MLMultiArray) -> MLMultiArray? {
+    func subtractArrays(_ a: MLMultiArray, _ b: MLMultiArray) -> MLMultiArray? {
         guard a.shape == b.shape else {
             return nil
         }
@@ -212,7 +212,7 @@ actor WeightExtractor {
     /// Serializes to a simple format that can be loaded by PyTorch:
     /// - Header: Magic number, version, parameter count
     /// - For each parameter: name length, name, shape, data
-    private func serializeToPyTorch(delta: [String: MLMultiArray]) throws -> Data {
+    func serializeToPyTorch(delta: [String: MLMultiArray]) throws -> Data {
         var data = Data()
 
         // Write magic number (0x50545448 = "PTTH" for PyTorch)
@@ -265,7 +265,7 @@ actor WeightExtractor {
     }
 
     /// Serializes an MLMultiArray to binary format.
-    private func serializeMLMultiArray(_ array: MLMultiArray) throws -> Data {
+    func serializeMLMultiArray(_ array: MLMultiArray) throws -> Data {
         var data = Data()
 
         // Convert all values to Float32 for consistency

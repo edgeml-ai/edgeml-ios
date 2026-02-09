@@ -8,17 +8,17 @@ final class DeviceAuthManagerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        MockURLProtocol.responses = []
-        MockURLProtocol.requests = []
+        SharedMockURLProtocol.reset()
+        SharedMockURLProtocol.allowedHost = Self.testHost
     }
 
     override class func setUp() {
         super.setUp()
-        URLProtocol.registerClass(MockURLProtocol.self)
+        URLProtocol.registerClass(SharedMockURLProtocol.self)
     }
 
     override class func tearDown() {
-        URLProtocol.unregisterClass(MockURLProtocol.self)
+        URLProtocol.unregisterClass(SharedMockURLProtocol.self)
         super.tearDown()
     }
 
@@ -27,7 +27,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
@@ -62,7 +62,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
@@ -76,8 +76,8 @@ final class DeviceAuthManagerTests: XCTestCase {
             deviceId: "device-db-id"
         )
 
-        XCTAssertEqual(MockURLProtocol.requests.count, 1)
-        let request = try XCTUnwrap(MockURLProtocol.requests.first)
+        XCTAssertEqual(SharedMockURLProtocol.requests.count, 1)
+        let request = try XCTUnwrap(SharedMockURLProtocol.requests.first)
         XCTAssertEqual(request.url?.path, "/api/v1/device-auth/bootstrap")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer bootstrap-token")
         let payload = try jsonBody(request)
@@ -93,7 +93,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(900))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
@@ -112,9 +112,9 @@ final class DeviceAuthManagerTests: XCTestCase {
         _ = try await manager.refresh()
         _ = try await manager.refresh()
 
-        XCTAssertEqual(MockURLProtocol.requests.count, 3)
-        let firstRefreshPayload = try jsonBody(try XCTUnwrap(MockURLProtocol.requests[safe: 1]))
-        let secondRefreshPayload = try jsonBody(try XCTUnwrap(MockURLProtocol.requests[safe: 2]))
+        XCTAssertEqual(SharedMockURLProtocol.requests.count, 3)
+        let firstRefreshPayload = try jsonBody(try XCTUnwrap(SharedMockURLProtocol.requests[safe: 1]))
+        let secondRefreshPayload = try jsonBody(try XCTUnwrap(SharedMockURLProtocol.requests[safe: 2]))
         XCTAssertEqual(firstRefreshPayload["refresh_token"] as? String, "ref_bootstrap")
         XCTAssertEqual(secondRefreshPayload["refresh_token"] as? String, "ref_refresh_1")
     }
@@ -124,7 +124,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(300))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
@@ -142,7 +142,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let expired = formatter.string(from: Date().addingTimeInterval(-60))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_expired", refresh: "ref_expired", expiresAt: expired)
@@ -165,7 +165,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(3600))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
@@ -175,7 +175,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         _ = try await manager.bootstrap(bootstrapBearerToken: "bootstrap-token")
         let token = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
         XCTAssertEqual(token, "acc_bootstrap")
-        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+        XCTAssertEqual(SharedMockURLProtocol.requests.count, 1)
     }
 
     func testRevokeFailurePreservesStoredState() async throws {
@@ -183,7 +183,7 @@ final class DeviceAuthManagerTests: XCTestCase {
         let formatter = ISO8601DateFormatter.withFractional
         let exp = formatter.string(from: Date().addingTimeInterval(600))
 
-        MockURLProtocol.responses = [
+        SharedMockURLProtocol.responses = [
             .success(
                 statusCode: 201,
                 json: tokenPayload(access: "acc_bootstrap", refresh: "ref_bootstrap", expiresAt: exp)
@@ -270,72 +270,6 @@ private final class InMemoryTokenStorage: TokenStorage, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         store.removeValue(forKey: key(service: service, account: account))
-    }
-}
-
-private final class MockURLProtocol: URLProtocol {
-    enum MockResponse {
-        case success(statusCode: Int, json: [String: Any])
-        case failure(Error)
-    }
-
-    static var responses: [MockResponse] = []
-    static var requests: [URLRequest] = []
-
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == DeviceAuthManagerTests.testHost
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        var captured = request
-        if captured.httpBody == nil, let stream = request.httpBodyStream {
-            stream.open()
-            let bufferSize = 4096
-            var data = Data()
-            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-            defer { buffer.deallocate() }
-            while stream.hasBytesAvailable {
-                let read = stream.read(buffer, maxLength: bufferSize)
-                if read > 0 { data.append(buffer, count: read) }
-                else { break }
-            }
-            stream.close()
-            captured.httpBody = data
-        }
-        Self.requests.append(captured)
-        guard !Self.responses.isEmpty else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-
-        let next = Self.responses.removeFirst()
-        switch next {
-        case let .failure(error):
-            client?.urlProtocol(self, didFailWithError: error)
-        case .success(statusCode: let statusCode, json: let json):
-            do {
-                let data = try JSONSerialization.data(withJSONObject: json)
-                let response = HTTPURLResponse(
-                    url: request.url!,
-                    statusCode: statusCode,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )!
-                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-                client?.urlProtocol(self, didLoad: data)
-                client?.urlProtocolDidFinishLoading(self)
-            } catch {
-                client?.urlProtocol(self, didFailWithError: error)
-            }
-        }
-    }
-
-    override func stopLoading() {
-        // No cleanup needed — mock responses are consumed synchronously in startLoading()
     }
 }
 
