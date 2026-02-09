@@ -380,8 +380,8 @@ public final class EdgeMLClient: @unchecked Sendable {
     }
 
     /// Clears all cached models.
-    public func clearCache() throws {
-        try modelManager.clearCache()
+    public func clearCache() async throws {
+        try await modelManager.clearCache()
 
         if configuration.enableLogging {
             logger.info("Model cache cleared")
@@ -658,8 +658,8 @@ public final class EdgeMLClient: @unchecked Sendable {
     private func buildDeviceInfo(appVersion: String?) async -> LocalDeviceInfo {
         var availableStorageMb: Int? = nil
         var totalMemoryMb: Int? = nil
-        var deviceModel = "Unknown"
-        var osVersion = "Unknown"
+        let deviceModel: String
+        let osVersion: String
 
         #if canImport(UIKit)
         // Get storage info
@@ -671,10 +671,11 @@ public final class EdgeMLClient: @unchecked Sendable {
         // Get total memory
         totalMemoryMb = Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024))
 
-        await MainActor.run {
-            deviceModel = UIDevice.current.model
-            osVersion = UIDevice.current.systemVersion
+        let deviceInfo = await MainActor.run {
+            (model: UIDevice.current.model, os: UIDevice.current.systemVersion)
         }
+        deviceModel = deviceInfo.model
+        osVersion = deviceInfo.os
         #else
         osVersion = ProcessInfo.processInfo.operatingSystemVersionString
         deviceModel = "Mac"
@@ -684,7 +685,12 @@ public final class EdgeMLClient: @unchecked Sendable {
         // Get locale info
         let currentLocale = Locale.current
         let locale = currentLocale.identifier
-        let region = currentLocale.region?.identifier
+        let region: String?
+        if #available(iOS 16.0, macOS 13.0, *) {
+            region = currentLocale.region?.identifier
+        } else {
+            region = (currentLocale as NSLocale).countryCode
+        }
         let timezone = TimeZone.current.identifier
 
         return LocalDeviceInfo(

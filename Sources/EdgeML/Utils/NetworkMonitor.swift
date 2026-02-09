@@ -127,19 +127,17 @@ public final class NetworkMonitor: @unchecked Sendable {
             return true
         }
 
+        let resumeTracker = ResumeTracker()
+
         return await withCheckedContinuation { continuation in
-            var didResume = false
             let token = UUID()
 
             // Set up timeout
             let timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                lock.lock()
-                handlers.removeValue(forKey: token)
-                lock.unlock()
+                self.removeHandler(token)
 
-                if !didResume {
-                    didResume = true
+                if await resumeTracker.tryResume() {
                     continuation.resume(returning: false)
                 }
             }
@@ -149,18 +147,29 @@ public final class NetworkMonitor: @unchecked Sendable {
             handlers[token] = { [weak self] isConnected in
                 guard let self = self else { return }
 
-                if isConnected && !didResume {
-                    didResume = true
-                    timeoutTask.cancel()
-
-                    self.lock.lock()
-                    self.handlers.removeValue(forKey: token)
-                    self.lock.unlock()
-
-                    continuation.resume(returning: true)
+                if isConnected {
+                    Task {
+                        if await resumeTracker.tryResume() {
+                            timeoutTask.cancel()
+                            self.removeHandler(token)
+                            continuation.resume(returning: true)
+                        }
+                    }
                 }
             }
             lock.unlock()
         }
+    }
+}
+
+/// Actor to safely track whether a continuation has already been resumed.
+private actor ResumeTracker {
+    private var didResume = false
+
+    /// Attempts to mark as resumed. Returns `true` if this is the first call, `false` otherwise.
+    func tryResume() -> Bool {
+        guard !didResume else { return false }
+        didResume = true
+        return true
     }
 }
