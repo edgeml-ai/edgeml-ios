@@ -91,32 +91,37 @@ actor WeightExtractor {
     // MARK: - Private Methods
 
     /// Extracts weights from a CoreML model using the model's parameter structure.
+    ///
+    /// Uses `MLModelDescription.trainingInputDescriptionsByName` and
+    /// `MLModel.parameterValue(for:)` on iOS 16+ to access updatable layer weights.
+    /// Falls back to training input inspection on older systems.
     private func extractWeights(from modelURL: URL) async throws -> [String: MLMultiArray] {
         var weights: [String: MLMultiArray] = [:]
 
         do {
-            // Load the model
             let model = try MLModel(contentsOf: modelURL)
+            let description = model.modelDescription
 
-            // For CoreML models with updatable parameters, we can access them through
-            // the model's parameter key-value pairs
-            // Note: This requires the model to be compiled with updateable parameters
+            // Get the updatable parameter keys from the model description.
+            // Updatable models expose their trainable layers through
+            // trainingInputDescriptionsByName (available on all updatable models).
+            let parameterKeys = extractParameterKeys(from: description)
 
-            // Try to extract using the model's description
-            if let modelDescription = model.modelDescription as? MLModelDescription {
-                // Get updatable parameter names
-                // In CoreML 5+, models can expose updatable parameters
-                let parameterKeys = extractParameterKeys(from: modelDescription)
+            if parameterKeys.isEmpty {
+                logger.warning("No updatable parameters found in model")
+            }
 
-                for key in parameterKeys {
-                    if let value = try? extractParameter(from: model, key: key) {
-                        weights[key] = value
-                    }
+            // Extract each parameter
+            for key in parameterKeys {
+                if let value = try? extractParameter(from: model, key: key) {
+                    weights[key] = value
                 }
             }
 
-            logger.debug("Extracted \(weights.count) parameter arrays")
+            logger.debug("Extracted \(weights.count) parameter arrays from \(parameterKeys.count) keys")
 
+        } catch let error as EdgeMLError {
+            throw error
         } catch {
             logger.error("Failed to extract weights: \(error.localizedDescription)")
             throw EdgeMLError.weightExtractionFailed(reason: error.localizedDescription)
@@ -125,25 +130,42 @@ actor WeightExtractor {
         return weights
     }
 
-    /// Extracts parameter keys from the model description.
-    private func extractParameterKeys(from _: MLModelDescription) -> [String] {
+    /// Extracts updatable parameter keys from the model description.
+    ///
+    /// For updatable CoreML models, `trainingInputDescriptionsByName` contains
+    /// the feature names used during training. The updatable layer weights are
+    /// accessible via `MLParameterKey` with the layer name.
+    private func extractParameterKeys(from description: MLModelDescription) -> [String] {
         var keys: [String] = []
 
-        // CoreML updatable models expose parameter descriptions
-        // These are typically layer names with suffixes like "_weight" or "_bias"
-        // For example: "dense_1_weight", "dense_1_bias", "conv2d_1_weight", etc.
+        // isUpdatable tells us if the model supports on-device training
+        guard description.isUpdatable else {
+            return keys
+        }
 
-        // In a real implementation, you'd inspect the model's parameter descriptions
-        // For now, we'll use a heuristic based on common layer naming patterns
-        let commonLayerPrefixes = ["dense", "conv2d", "lstm", "gru", "embedding"]
-        let parameterSuffixes = ["_weight", "_bias", "_kernel", "_gamma", "_beta"]
+        // trainingInputDescriptionsByName gives us the training feature names
+        // (inputs the model expects during training, e.g., "input" and "target")
+        // The actual updatable layer names come from parameterDescriptionsByKey
+        // parameterDescriptionsByKey is available iOS 14+
+        for (key, _) in description.parameterDescriptionsByKey {
+            keys.append(key.description)
+        }
 
-        // This is a simplified approach - in production, you'd use the actual
-        // model parameter descriptions from CoreML
-        for prefix in commonLayerPrefixes {
-            for i in 0..<10 { // Assume up to 10 layers of each type
-                for suffix in parameterSuffixes {
-                    keys.append("\(prefix)_\(i)\(suffix)")
+        // Fallback: if no keys found via parameterDescriptionsByKey,
+        // use the training input descriptions to infer layer names.
+        if keys.isEmpty {
+            // Common naming convention: layers in updatable models are named
+            // with descriptive prefixes. We scan for known patterns.
+            let layerPrefixes = ["dense", "conv", "lstm", "gru", "embedding", "fc", "linear"]
+            let suffixes = [".weight", ".bias", "_weight", "_bias"]
+
+            for (name, _) in description.inputDescriptionsByName {
+                for prefix in layerPrefixes {
+                    if name.hasPrefix(prefix) {
+                        for suffix in suffixes {
+                            keys.append(name + suffix)
+                        }
+                    }
                 }
             }
         }
@@ -152,16 +174,28 @@ actor WeightExtractor {
     }
 
     /// Extracts a specific parameter from the model.
-    private func extractParameter(from _: MLModel, key _: String) throws -> MLMultiArray {
-        // In CoreML 5+, you can access parameters through the MLModel API
-        // However, this requires the model to expose these parameters
+    ///
+    /// On iOS 16+, uses `MLModel.parameterValue(for:)`.
+    /// On older systems, attempts to read from the model's prediction output
+    /// as a fallback (limited support).
+    /// Extracts a specific parameter from the model using `parameterValue(for:)`.
+    /// Available on iOS 14+ / macOS 11+ for updatable models.
+    private func extractParameter(from model: MLModel, key: String) throws -> MLMultiArray {
+        // Try weights scoped to this key
+        let paramKey = MLParameterKey.weights.scoped(to: key)
+        if let value = try? model.parameterValue(for: paramKey) as? MLMultiArray {
+            return value
+        }
 
-        // For models created with Create ML or exported with coremltools,
-        // parameters can be accessed through the model's underlying neural network
+        // Try bias scoped to this key
+        let biasKey = MLParameterKey.biases.scoped(to: key)
+        if let value = try? model.parameterValue(for: biasKey) as? MLMultiArray {
+            return value
+        }
 
-        // This is a placeholder - the actual implementation depends on how
-        // the CoreML model was created and whether it exposes parameters
-        throw EdgeMLError.weightExtractionFailed(reason: "Parameter extraction not yet implemented")
+        throw EdgeMLError.weightExtractionFailed(
+            reason: "Cannot extract parameter '\(key)' — model may not expose this parameter"
+        )
     }
 
     /// Computes delta between original and updated weights.

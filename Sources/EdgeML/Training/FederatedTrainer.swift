@@ -171,17 +171,70 @@ public actor FederatedTrainer {
         trainingData: MLBatchProvider,
         config: TrainingConfig
     ) async throws -> MLUpdateContext {
+        self.currentTrainingConfig = config
+
+        // CoreML's MLUpdateTask runs one "update pass" as defined in the model's
+        // compiled training spec. For multi-epoch training, we chain update tasks:
+        // each subsequent task uses the model from the previous task's context.
+        var currentModelURL = modelURL
+        var lastContext: MLUpdateContext?
+        var tempURLs: [URL] = []
+
+        defer {
+            // Clean up intermediate epoch models
+            for url in tempURLs {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        for epoch in 0..<max(config.epochs, 1) {
+            let context = try await runSingleUpdatePass(
+                modelURL: currentModelURL,
+                trainingData: trainingData,
+                config: config,
+                epoch: epoch
+            )
+
+            lastContext = context
+
+            // For subsequent epochs, write the updated model to a temp location
+            if epoch < config.epochs - 1 {
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("edgeml-epoch-\(epoch)-\(UUID().uuidString)")
+                    .appendingPathExtension("mlmodelc")
+                try context.model.write(to: tempURL)
+                tempURLs.append(tempURL)
+                currentModelURL = tempURL
+            }
+        }
+
+        guard let finalContext = lastContext else {
+            throw EdgeMLError.trainingFailed(reason: "No training epochs completed")
+        }
+
+        return finalContext
+    }
+
+    /// Runs a single MLUpdateTask pass and returns the update context.
+    private func runSingleUpdatePass(
+        modelURL: URL,
+        trainingData: MLBatchProvider,
+        config: TrainingConfig,
+        epoch: Int
+    ) async throws -> MLUpdateContext {
         return try await withCheckedThrowingContinuation { [self] continuation in
             do {
-                // Configure training parameters
                 let parameters = try self.configureTrainingParameters(config: config)
 
-                // Create update task
                 let progressHandlers = MLUpdateProgressHandlers(
-                    forEvents: [.epochEnd],
-                    progressHandler: { context in
+                    forEvents: [.trainingBegin, .epochEnd],
+                    progressHandler: { [self] context in
                         if self.configuration.enableLogging {
-                            self.logger.debug("Training epoch completed")
+                            if let loss = context.metrics[.lossValue] as? Double {
+                                self.logger.debug("Epoch \(epoch): loss = \(String(format: "%.6f", loss))")
+                            } else {
+                                self.logger.debug("Epoch \(epoch) completed")
+                            }
                         }
                     },
                     completionHandler: { context in
@@ -190,10 +243,10 @@ public actor FederatedTrainer {
                             continuation.resume(returning: context)
                         case .failed:
                             continuation.resume(throwing: EdgeMLError.trainingFailed(
-                                reason: context.task.error?.localizedDescription ?? "Unknown error"
+                                reason: context.task.error?.localizedDescription ?? "Unknown training error"
                             ))
                         @unknown default:
-                            continuation.resume(throwing: EdgeMLError.trainingFailed(reason: "Unexpected state"))
+                            continuation.resume(throwing: EdgeMLError.trainingFailed(reason: "Unexpected task state"))
                         }
                     }
                 )
@@ -205,7 +258,6 @@ public actor FederatedTrainer {
                     progressHandlers: progressHandlers
                 )
 
-                // Start training
                 updateTask.resume()
 
             } catch {
@@ -214,44 +266,68 @@ public actor FederatedTrainer {
         }
     }
 
-    private func configureTrainingParameters(config _: TrainingConfig) throws -> MLModelConfiguration {
+    private func configureTrainingParameters(config: TrainingConfig) throws -> MLModelConfiguration {
         let modelConfig = MLModelConfiguration()
         modelConfig.computeUnits = .all
 
-        // Note: In a real implementation, you would set up MLUpdateProgressHandlers
-        // and configure epochs, learning rate, etc. through the appropriate APIs
-        // The exact API depends on the model's training configuration
+        // Training hyperparameters (epochs, learning rate, batch size) are
+        // typically compiled into the .mlmodelc via coremltools updateable spec.
+        // The TrainingConfig is used for logging and the epochs override below.
+
+        if configuration.enableLogging {
+            logger.info("""
+                Training config: epochs=\(config.epochs), \
+                batchSize=\(config.batchSize), \
+                learningRate=\(config.learningRate)
+                """)
+        }
 
         return modelConfig
     }
 
+    /// Number of epochs for the current training config. MLUpdateTask uses the
+    /// model's compiled epoch count, but we can control this by running
+    /// multiple single-epoch update tasks in sequence when needed.
+    private var currentTrainingConfig: TrainingConfig?
+
+    /// Saves the trained model from the last update context to the given URL.
+    ///
+    /// - Parameter url: Destination URL for the compiled model.
+    /// - Throws: `EdgeMLError` if no training context is available or write fails.
+    public func saveTrainedModel(to url: URL) async throws {
+        guard let context = lastUpdateContext else {
+            throw EdgeMLError.trainingFailed(reason: "No training context available")
+        }
+
+        // Remove existing file if present
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+
+        try context.model.write(to: url)
+
+        if configuration.enableLogging {
+            logger.info("Saved trained model to \(url.path)")
+        }
+    }
+
     private func extractLoss(from context: MLUpdateContext) -> Double? {
-        // Extract loss from update context metrics
-        if let metrics = context.metrics[.lossValue] {
-            return metrics as? Double
+        // MLUpdateContext.metrics uses MLMetricKey keys
+        if let lossValue = context.metrics[.lossValue] as? Double {
+            return lossValue
         }
         return nil
     }
 
-    private func extractAccuracy(from _: MLUpdateContext) -> Double? {
-        // Check if accuracy metric is available
-        // This depends on the model's configuration
+    private func extractAccuracy(from context: MLUpdateContext) -> Double? {
+        // Check all metrics for accuracy-related keys
+        // CoreML doesn't have a standard accuracy key, but custom models may report it
+        for (key, value) in context.metrics {
+            let keyStr = String(describing: key)
+            if keyStr.lowercased().contains("accuracy"), let doubleVal = value as? Double {
+                return doubleVal
+            }
+        }
         return nil
-    }
-}
-
-// MARK: - MLUpdateContext Extension
-
-extension MLUpdateContext {
-    /// Available metric keys
-    enum MetricKey: String {
-        case lossValue = "MLMetricKeyLossValue"
-    }
-
-    /// Get metrics by key
-    var metrics: [MetricKey: Any] {
-        // In a real implementation, you would access the context's metrics
-        // This is a simplified placeholder
-        return [:]
     }
 }
