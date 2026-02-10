@@ -19,12 +19,15 @@ The EdgeML iOS SDK brings production-ready federated learning to iPhone and iPad
 
 ### Key Features
 
-- **🔒 Privacy-First**: All training happens on-device, data never leaves the phone
-- **⚡ CoreML Optimized**: Leverages Neural Engine for on-device training
-- **📱 Production Ready**: Complete hardware metadata and runtime constraint monitoring
-- **🔋 Battery Aware**: Training eligibility based on battery level and charging state
-- **📶 Network Smart**: Respects WiFi-only preferences for model sync
-- **✅ Type Safe**: 100% Swift with comprehensive type safety
+- **Privacy-First**: All training happens on-device, data never leaves the phone
+- **Secure Aggregation**: SecAgg+ protocol with Shamir secret sharing -- raw gradients never leave the device
+- **CoreML Optimized**: Leverages Neural Engine for on-device training
+- **Streaming Inference**: Multi-modal (text, image, audio, video) with automatic TTFC/throughput metrics
+- **On-Device Personalization**: Incremental learning with local-only and federated modes
+- **Production Ready**: Complete hardware metadata and runtime constraint monitoring
+- **Battery Aware**: Training eligibility based on battery level and charging state
+- **Network Smart**: Respects WiFi-only preferences for model sync
+- **Type Safe**: 100% Swift with comprehensive type safety, zero external dependencies
 
 ### Security & Privacy
 
