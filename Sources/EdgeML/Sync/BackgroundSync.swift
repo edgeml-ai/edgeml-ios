@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import BackgroundTasks
 import os.log
@@ -244,3 +245,4 @@ extension BackgroundSync {
         }
     }
 }
+#endif

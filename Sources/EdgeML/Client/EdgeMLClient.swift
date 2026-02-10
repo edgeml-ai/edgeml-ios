@@ -732,6 +732,7 @@ public final class EdgeMLClient: @unchecked Sendable {
     ///   - modelId: Identifier of the model to train.
     ///   - dataProvider: Closure that provides training data.
     ///   - constraints: Background execution constraints.
+    #if os(iOS)
     public func enableBackgroundTraining(
         modelId: String,
         dataProvider: @escaping @Sendable () -> MLBatchProvider,
@@ -759,6 +760,7 @@ public final class EdgeMLClient: @unchecked Sendable {
             logger.info("Background training disabled")
         }
     }
+    #endif
 
     // MARK: - Event Tracking
 

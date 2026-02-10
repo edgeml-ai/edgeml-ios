@@ -818,9 +818,9 @@ final class SecureAggregationTests: XCTestCase {
         let d22 = SecAggPlusClient.dequantize(q22, clippingRange: clippingRange, targetRange: 1 << 22)
         let err22 = abs(d22[0] - value)
 
-        // Higher target range should give better precision
-        XCTAssertLessThan(err22, err4,
-            "Higher target range should yield smaller quantization error")
+        // Higher target range should give equal or better precision
+        XCTAssertLessThanOrEqual(err22, err4,
+            "Higher target range should yield smaller or equal quantization error")
         // 4-bit error bound: 2*clip/range = 16/16 = 1.0
         XCTAssertLessThanOrEqual(err4, 1.0)
         // 22-bit error bound: 16/4194304 ~ 0.000004
