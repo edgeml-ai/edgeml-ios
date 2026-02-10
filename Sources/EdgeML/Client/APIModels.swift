@@ -575,6 +575,103 @@ public struct TrackingEvent: Codable, Sendable {
     }
 }
 
+// MARK: - Secure Aggregation
+
+/// Response from the server when setting up a SecAgg session.
+public struct SecAggSessionResponse: Codable, Sendable {
+    /// Server-assigned session identifier.
+    public let sessionId: String
+    /// Round identifier.
+    public let roundId: String
+    /// This client's 1-based participant index.
+    public let clientIndex: Int
+    /// Minimum shares needed for reconstruction.
+    public let threshold: Int
+    /// Total participants in this session.
+    public let totalClients: Int
+    /// Privacy budget.
+    public let privacyBudget: Double
+    /// Key length in bits.
+    public let keyLength: Int
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case roundId = "round_id"
+        case clientIndex = "client_index"
+        case threshold
+        case totalClients = "total_clients"
+        case privacyBudget = "privacy_budget"
+        case keyLength = "key_length"
+    }
+}
+
+/// Request to submit key shares during SecAgg Phase 1.
+public struct SecAggShareKeysRequest: Codable, Sendable {
+    /// Session identifier.
+    public let sessionId: String
+    /// Device identifier.
+    public let deviceId: String
+    /// Base64-encoded serialized share bundles.
+    public let sharesData: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case deviceId = "device_id"
+        case sharesData = "shares_data"
+    }
+}
+
+/// Request to submit masked model update during SecAgg Phase 2.
+public struct SecAggMaskedInputRequest: Codable, Sendable {
+    /// Session identifier.
+    public let sessionId: String
+    /// Device identifier.
+    public let deviceId: String
+    /// Base64-encoded masked weight data.
+    public let maskedWeightsData: String
+    /// Number of training samples used.
+    public let sampleCount: Int
+    /// Training metrics.
+    public let metrics: [String: Double]
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case deviceId = "device_id"
+        case maskedWeightsData = "masked_weights_data"
+        case sampleCount = "sample_count"
+        case metrics
+    }
+}
+
+/// Request to submit unmasking shares during SecAgg Phase 3.
+public struct SecAggUnmaskRequest: Codable, Sendable {
+    /// Session identifier.
+    public let sessionId: String
+    /// Device identifier.
+    public let deviceId: String
+    /// Base64-encoded unmasking share data.
+    public let unmaskData: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case deviceId = "device_id"
+        case unmaskData = "unmask_data"
+    }
+}
+
+/// Server response when requesting unmasking, includes dropped client indices.
+public struct SecAggUnmaskResponse: Codable, Sendable {
+    /// Indices of clients that dropped out.
+    public let droppedClientIndices: [Int]
+    /// Whether unmasking is needed.
+    public let unmaskingRequired: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case droppedClientIndices = "dropped_client_indices"
+        case unmaskingRequired = "unmasking_required"
+    }
+}
+
 // MARK: - Error Response
 
 /// Error response from the server.
