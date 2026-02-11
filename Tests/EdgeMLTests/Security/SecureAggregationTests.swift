@@ -380,7 +380,7 @@ final class SecureAggregationTests: XCTestCase {
         let config = SecAggPlusConfig(
             sessionId: "s", roundId: "r",
             threshold: 3, totalClients: 5, myIndex: 2,
-            clippingRange: 5.0, targetRange: 1 << 20, modRange: 1 << 24
+            quantization: .init(clippingRange: 5.0, targetRange: 1 << 20, modRange: 1 << 24)
         )
 
         XCTAssertEqual(config.clippingRange, 5.0)
@@ -580,7 +580,7 @@ final class SecureAggregationTests: XCTestCase {
             let config = SecAggPlusConfig(
                 sessionId: "test-session", roundId: "round-1",
                 threshold: threshold, totalClients: totalClients, myIndex: i,
-                clippingRange: 3.0, targetRange: 1 << 16, modRange: modRange
+                quantization: .init(clippingRange: 3.0, targetRange: 1 << 16, modRange: modRange)
             )
             let client = SecAggPlusClient(config: config)
             clients.append(client)
@@ -733,7 +733,7 @@ final class SecureAggregationTests: XCTestCase {
             let config = SecAggPlusConfig(
                 sessionId: "s", roundId: "r",
                 threshold: threshold, totalClients: totalClients, myIndex: i,
-                clippingRange: 1.0, targetRange: 100, modRange: modRange
+                quantization: .init(clippingRange: 1.0, targetRange: 100, modRange: modRange)
             )
             let client = SecAggPlusClient(config: config)
             clients.append(client)
@@ -1063,7 +1063,7 @@ final class SecureAggregationTests: XCTestCase {
             let config = SecAggPlusConfig(
                 sessionId: "5client-test", roundId: "r1",
                 threshold: threshold, totalClients: totalClients, myIndex: i,
-                clippingRange: 8.0, targetRange: 1 << 16, modRange: modRange
+                quantization: .init(clippingRange: 8.0, targetRange: 1 << 16, modRange: modRange)
             )
             let client = SecAggPlusClient(config: config)
             clients.append(client)
@@ -1170,7 +1170,7 @@ final class SecureAggregationTests: XCTestCase {
             let config = SecAggPlusConfig(
                 sessionId: "cancel-test", roundId: "r1",
                 threshold: threshold, totalClients: totalClients, myIndex: i,
-                clippingRange: 1.0, targetRange: 100, modRange: modRange
+                quantization: .init(clippingRange: 1.0, targetRange: 100, modRange: modRange)
             )
             let client = SecAggPlusClient(config: config)
             clients.append(client)
@@ -1307,7 +1307,7 @@ final class SecureAggregationTests: XCTestCase {
         let config = SecAggPlusConfig(
             sessionId: "s", roundId: "r",
             threshold: 2, totalClients: 2, myIndex: 1,
-            clippingRange: 1.0, targetRange: 100, modRange: 1 << 20
+            quantization: .init(clippingRange: 1.0, targetRange: 100, modRange: 1 << 20)
         )
         let client = SecAggPlusClient(config: config)
         let keys = await client.getPublicKeys()
@@ -1487,7 +1487,7 @@ final class SecureAggregationTests: XCTestCase {
         let config = SecAggPlusConfig(
             sessionId: "s", roundId: "r",
             threshold: 2, totalClients: 3, myIndex: 1,
-            clippingRange: 1.0, targetRange: 100, modRange: 1 << 20
+            quantization: .init(clippingRange: 1.0, targetRange: 100, modRange: 1 << 20)
         )
         let client = SecAggPlusClient(config: config)
 

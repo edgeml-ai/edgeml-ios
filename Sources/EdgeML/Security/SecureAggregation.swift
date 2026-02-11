@@ -408,14 +408,16 @@ public actor SecureAggregationClient {
     /// product, then reduces mod p using repeated subtraction / shift for the
     /// Mersenne prime 2^127 - 1.
     private func mulMod128(
-        _ a: UInt128Wrapper, _ b: UInt128Wrapper, _ p: UInt128Wrapper
+        _ a: UInt128Wrapper, _ b: UInt128Wrapper, _: UInt128Wrapper
     ) -> UInt128Wrapper {
         // Full 256-bit product via schoolbook multiplication of 64-bit halves.
         // a = aH * 2^64 + aL, b = bH * 2^64 + bL
         // product = aL*bL + (aL*bH + aH*bL)*2^64 + aH*bH*2^128
 
-        let aL = a.low, aH = a.high
-        let bL = b.low, bH = b.high
+        let aL = a.low
+        let aH = a.high
+        let bL = b.low
+        let bH = b.high
 
         // aL * bL -> 128-bit (r1High, r1Low)
         let r1 = aL.multipliedFullWidth(by: bL)
@@ -459,8 +461,6 @@ public actor SecureAggregationClient {
     private func mersenneReduce256(
         w3: UInt64, w2: UInt64, w1: UInt64, w0: UInt64
     ) -> UInt128Wrapper {
-        let p = fieldModulus
-
         // Value = (w3, w2, w1, w0) as a 256-bit number
         // low 127 bits = bits [126:0] of (w1, w0)
         // high part = bits [255:127]
@@ -678,7 +678,7 @@ public actor SecureAggregationClient {
     private func sha256(_ data: Data) -> Data {
         var hash = [UInt8](repeating: 0, count: 32)
         _ = data.withUnsafeBytes { buffer in
-            CC_SHA256(buffer.baseAddress, CC_LONG(data.count), &hash)
+            ccSha256(buffer.baseAddress, CC_LONG(data.count), &hash)
         }
         return Data(hash)
     }
@@ -833,14 +833,38 @@ public actor SecureAggregationClient {
 
 /// Configuration for the SecAgg+ protocol with ECDH pairwise masking.
 public struct SecAggPlusConfig: Sendable {
+
+    /// Quantization parameters for clipping, scaling, and modular arithmetic.
+    public struct QuantizationParams: Sendable {
+        /// Clipping range for input values.
+        public let clippingRange: Float
+        /// Target range for quantized output.
+        public let targetRange: Int
+        /// Modular range for masked arithmetic.
+        public let modRange: Int
+
+        public init(
+            clippingRange: Float = 8.0,
+            targetRange: Int = 1 << 22,
+            modRange: Int = 1 << 32
+        ) {
+            self.clippingRange = clippingRange
+            self.targetRange = targetRange
+            self.modRange = modRange
+        }
+    }
+
     public let sessionId: String
     public let roundId: String
     public let threshold: Int
     public let totalClients: Int
     public let myIndex: Int
-    public let clippingRange: Float
-    public let targetRange: Int
-    public let modRange: Int
+    public let quantization: QuantizationParams
+
+    /// Convenience accessors for backward compatibility.
+    public var clippingRange: Float { quantization.clippingRange }
+    public var targetRange: Int { quantization.targetRange }
+    public var modRange: Int { quantization.modRange }
 
     public init(
         sessionId: String,
@@ -848,19 +872,16 @@ public struct SecAggPlusConfig: Sendable {
         threshold: Int,
         totalClients: Int,
         myIndex: Int,
-        clippingRange: Float = 8.0,
-        targetRange: Int = 1 << 22,
-        modRange: Int = 1 << 32
+        quantization: QuantizationParams = QuantizationParams()
     ) {
         self.sessionId = sessionId
         self.roundId = roundId
         self.threshold = threshold
         self.totalClients = totalClients
         self.myIndex = myIndex
-        self.clippingRange = clippingRange
-        self.targetRange = targetRange
-        self.modRange = modRange
+        self.quantization = quantization
     }
+
 }
 
 // MARK: - SecAgg+ Client
@@ -1218,7 +1239,7 @@ public actor SecAggPlusClient {
 // which is unavailable in Swift Package Manager targets by default.
 // These are available via the Darwin module on all Apple platforms.
 @_silgen_name("CC_SHA256")
-private func CC_SHA256(
+private func ccSha256(
     _ data: UnsafeRawPointer?,
     _ len: UInt32,
     _ md: UnsafeMutablePointer<UInt8>?

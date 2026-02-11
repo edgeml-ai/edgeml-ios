@@ -22,9 +22,8 @@ final class EdgeMLClientTests: XCTestCase {
 
     func testClientInitializationWithConfiguration() {
         let config = EdgeMLConfiguration(
-            maxRetryAttempts: 5,
-            requestTimeout: 60,
-            enableLogging: true
+            network: .init(maxRetryAttempts: 5, requestTimeout: 60),
+            logging: .init(enableLogging: true)
         )
 
         let client = EdgeMLClient(

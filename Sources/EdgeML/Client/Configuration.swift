@@ -154,6 +154,7 @@ public struct EdgeMLConfiguration: Sendable {
     // MARK: - Convenience Initializer (flat parameters)
 
     /// Creates a new configuration with flat parameters for convenience.
+    @available(*, deprecated, message: "Use the structured initializer with NetworkPolicy, LoggingPolicy, and TrainingPolicy instead")
     public init(
         maxRetryAttempts: Int = 3,
         requestTimeout: TimeInterval = 30,

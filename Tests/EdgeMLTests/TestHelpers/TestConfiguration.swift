@@ -12,16 +12,20 @@ enum TestConfiguration {
         maxCacheSize: UInt64 = 10 * 1024 * 1024 // 10 MB
     ) -> EdgeMLConfiguration {
         EdgeMLConfiguration(
-            maxRetryAttempts: maxRetryAttempts,
-            requestTimeout: requestTimeout,
-            downloadTimeout: downloadTimeout,
-            enableLogging: enableLogging,
+            network: .init(
+                maxRetryAttempts: maxRetryAttempts,
+                requestTimeout: requestTimeout,
+                downloadTimeout: downloadTimeout,
+                requireWiFiForDownload: false
+            ),
+            logging: .init(enableLogging: enableLogging),
             maxCacheSize: maxCacheSize,
             autoCheckUpdates: false,
             updateCheckInterval: 1,
-            requireWiFiForDownload: false,
-            requireChargingForTraining: false,
-            minimumBatteryLevel: 0.0
+            training: .init(
+                requireChargingForTraining: false,
+                minimumBatteryLevel: 0.0
+            )
         )
     }
 

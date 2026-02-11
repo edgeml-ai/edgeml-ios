@@ -43,17 +43,17 @@ final class ConfigurationTests: XCTestCase {
 
     func testCustomConfiguration() {
         let config = EdgeMLConfiguration(
-            maxRetryAttempts: 5,
-            requestTimeout: 60,
-            downloadTimeout: 600,
-            enableLogging: true,
-            logLevel: .verbose,
+            network: .init(
+                maxRetryAttempts: 5,
+                requestTimeout: 60,
+                downloadTimeout: 600,
+                requireWiFiForDownload: true
+            ),
+            logging: .init(enableLogging: true, logLevel: .verbose),
             maxCacheSize: 100 * 1024 * 1024,
             autoCheckUpdates: false,
             updateCheckInterval: 7200,
-            requireWiFiForDownload: true,
-            requireChargingForTraining: false,
-            minimumBatteryLevel: 0.5
+            training: .init(requireChargingForTraining: false, minimumBatteryLevel: 0.5)
         )
 
         XCTAssertEqual(config.maxRetryAttempts, 5)
@@ -218,24 +218,10 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.minimumBatteryLevel, config.training.minimumBatteryLevel)
     }
 
-    // MARK: - Flat Convenience Init Equivalence
+    // MARK: - Structured Init Consistency
 
-    func testFlatInitMatchesStructuredInit() {
-        let flat = EdgeMLConfiguration(
-            maxRetryAttempts: 4,
-            requestTimeout: 60,
-            downloadTimeout: 400,
-            enableLogging: true,
-            logLevel: .warning,
-            maxCacheSize: 300 * 1024 * 1024,
-            autoCheckUpdates: false,
-            updateCheckInterval: 7200,
-            requireWiFiForDownload: true,
-            requireChargingForTraining: false,
-            minimumBatteryLevel: 0.15
-        )
-
-        let structured = EdgeMLConfiguration(
+    func testStructuredInitBackwardAccessorsMatch() {
+        let config = EdgeMLConfiguration(
             network: .init(maxRetryAttempts: 4, requestTimeout: 60, downloadTimeout: 400, requireWiFiForDownload: true),
             logging: .init(enableLogging: true, logLevel: .warning),
             maxCacheSize: 300 * 1024 * 1024,
@@ -244,17 +230,17 @@ final class ConfigurationTests: XCTestCase {
             training: .init(requireChargingForTraining: false, minimumBatteryLevel: 0.15)
         )
 
-        XCTAssertEqual(flat.maxRetryAttempts, structured.maxRetryAttempts)
-        XCTAssertEqual(flat.requestTimeout, structured.requestTimeout)
-        XCTAssertEqual(flat.downloadTimeout, structured.downloadTimeout)
-        XCTAssertEqual(flat.enableLogging, structured.enableLogging)
-        XCTAssertEqual(flat.logLevel, structured.logLevel)
-        XCTAssertEqual(flat.maxCacheSize, structured.maxCacheSize)
-        XCTAssertEqual(flat.autoCheckUpdates, structured.autoCheckUpdates)
-        XCTAssertEqual(flat.updateCheckInterval, structured.updateCheckInterval)
-        XCTAssertEqual(flat.requireWiFiForDownload, structured.requireWiFiForDownload)
-        XCTAssertEqual(flat.requireChargingForTraining, structured.requireChargingForTraining)
-        XCTAssertEqual(flat.minimumBatteryLevel, structured.minimumBatteryLevel)
+        XCTAssertEqual(config.maxRetryAttempts, 4)
+        XCTAssertEqual(config.requestTimeout, 60)
+        XCTAssertEqual(config.downloadTimeout, 400)
+        XCTAssertTrue(config.enableLogging)
+        XCTAssertEqual(config.logLevel, .warning)
+        XCTAssertEqual(config.maxCacheSize, 300 * 1024 * 1024)
+        XCTAssertFalse(config.autoCheckUpdates)
+        XCTAssertEqual(config.updateCheckInterval, 7200)
+        XCTAssertTrue(config.requireWiFiForDownload)
+        XCTAssertFalse(config.requireChargingForTraining)
+        XCTAssertEqual(config.minimumBatteryLevel, 0.15)
     }
 
     // MARK: - Preset Semantics
