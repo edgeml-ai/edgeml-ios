@@ -61,6 +61,40 @@ jobs:
           xcrun xccov view --report --json TestResults.xcresult > coverage.json
           xcrun xccov view --report TestResults.xcresult
 
+      - name: Convert coverage to lcov
+        run: |
+          python3 << 'PYEOF'
+          import json, subprocess
+
+          result = subprocess.run(
+              ["xcrun", "xccov", "view", "--report", "--json", "TestResults.xcresult"],
+              capture_output=True, text=True, check=True,
+          )
+          report = json.loads(result.stdout)
+
+          with open("coverage.lcov", "w") as f:
+              for target in report.get("targets", []):
+                  for src in target.get("files", []):
+                      path = src.get("path", "")
+                      if not path or "/Tests/" in path:
+                          continue
+                      f.write(f"SF:{path}\n")
+                      lines_out = subprocess.run(
+                          ["xcrun", "xccov", "view", "--file", path, "TestResults.xcresult"],
+                          capture_output=True, text=True,
+                      )
+                      for num, raw_line in enumerate(lines_out.stdout.splitlines(), 1):
+                          col = raw_line.split(":")[0].strip() if ":" in raw_line else ""
+                          if col and col != "*":
+                              try:
+                                  f.write(f"DA:{num},{int(col)}\n")
+                              except ValueError:
+                                  pass
+                      f.write("end_of_record\n")
+
+          print("Generated coverage.lcov")
+          PYEOF
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
         env:
