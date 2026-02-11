@@ -341,17 +341,16 @@ public actor PersonalizationManager {
             throw EdgeMLError.trainingFailed(reason: "Could not determine personalized model URL")
         }
 
-        // The trained model is now stored in the trainer's context
-        // We need to save it to the personalized model URL
-        // This is a placeholder - actual implementation depends on CoreML's APIs
+        // Write the trained model from the trainer's update context to disk
+        try await trainer.saveTrainedModel(to: personalizedURL)
 
-        let mlModel = try MLModel(contentsOf: model.compiledModelURL)
-        let metadata = model.metadata
+        // Load the saved model as the new personalized model
+        let mlModel = try MLModel(contentsOf: personalizedURL)
         personalizedModel = EdgeMLModel(
             id: model.id,
             version: "\(model.version)-personalized",
             mlModel: mlModel,
-            metadata: metadata,
+            metadata: model.metadata,
             compiledModelURL: personalizedURL
         )
 

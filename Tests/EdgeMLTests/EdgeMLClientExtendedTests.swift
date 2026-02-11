@@ -256,6 +256,7 @@ final class EdgeMLClientExtendedTests: XCTestCase {
 
     // MARK: - Background training
 
+    #if os(iOS)
     func testEnableAndDisableBackgroundTraining() {
         let client = makeClient()
 
@@ -279,6 +280,7 @@ final class EdgeMLClientExtendedTests: XCTestCase {
 
         client.disableBackgroundTraining()
     }
+    #endif
 
     // MARK: - Static properties
 

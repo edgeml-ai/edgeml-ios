@@ -55,6 +55,9 @@ public final class EdgeMLClient: @unchecked Sendable {
     private let configuration: EdgeMLConfiguration
     private let logger: Logger
 
+    /// Secure aggregation client, lazily created when SecAgg is used.
+    private var secAggClient: SecureAggregationClient?
+
     /// Organization ID for this client.
     public let orgId: String
 
@@ -567,6 +570,132 @@ public final class EdgeMLClient: @unchecked Sendable {
         return roundResult
     }
 
+    /// Participates in a federated training round with secure aggregation.
+    ///
+    /// The client never sends raw gradients to the server. Instead:
+    /// 1. Joins a SecAgg session for the round
+    /// 2. Generates and distributes Shamir secret shares of a mask seed
+    /// 3. Trains locally and masks the weight update before uploading
+    /// 4. Participates in unmasking so the server can reconstruct the aggregate
+    ///
+    /// - Parameters:
+    ///   - modelId: Identifier of the model to train.
+    ///   - roundId: Server-assigned round identifier.
+    ///   - dataProvider: Closure that provides training data.
+    ///   - config: Training configuration.
+    /// - Returns: Result of the training round.
+    /// - Throws: `EdgeMLError` if training or SecAgg protocol fails.
+    public func participateInSecureRound(
+        modelId: String,
+        roundId: String,
+        dataProvider: @escaping () -> MLBatchProvider,
+        config: TrainingConfig = .standard
+    ) async throws -> RoundResult {
+        guard let deviceId = self.deviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        if configuration.enableLogging {
+            logger.info("Joining SecAgg round \(roundId) for model \(modelId)")
+        }
+
+        // Lazily create SecAgg client
+        if secAggClient == nil {
+            secAggClient = SecureAggregationClient()
+        }
+        let secAgg = secAggClient!
+
+        // Phase 0: Join the SecAgg session
+        let session = try await apiClient.joinSecAggSession(deviceId: deviceId, roundId: roundId)
+
+        let secAggConfig = SecAggConfiguration(
+            threshold: session.threshold,
+            totalClients: session.totalClients,
+            privacyBudget: session.privacyBudget,
+            keyLength: session.keyLength
+        )
+
+        await secAgg.beginSession(
+            sessionId: session.sessionId,
+            clientIndex: session.clientIndex,
+            configuration: secAggConfig
+        )
+
+        // Phase 1: Generate and submit key shares
+        let sharesData = try await secAgg.generateKeyShares()
+        let shareKeysRequest = SecAggShareKeysRequest(
+            sessionId: session.sessionId,
+            deviceId: deviceId,
+            sharesData: sharesData.base64EncodedString()
+        )
+        try await apiClient.submitSecAggShares(shareKeysRequest)
+
+        // Train locally (same as non-SecAgg path)
+        let model: EdgeMLModel
+        if let cached = getCachedModel(modelId: modelId) {
+            model = cached
+        } else {
+            model = try await downloadModel(modelId: modelId)
+        }
+
+        let trainer = FederatedTrainer(configuration: configuration)
+        let trainingResult = try await trainer.train(
+            model: model,
+            dataProvider: dataProvider,
+            config: config
+        )
+
+        let weightUpdate = try await trainer.extractWeightUpdate(
+            model: model,
+            trainingResult: trainingResult
+        )
+
+        // Phase 2: Mask and submit the model update
+        let maskedWeights = try await secAgg.maskModelUpdate(weightUpdate.weightsData)
+
+        let maskedInputRequest = SecAggMaskedInputRequest(
+            sessionId: session.sessionId,
+            deviceId: deviceId,
+            maskedWeightsData: maskedWeights.base64EncodedString(),
+            sampleCount: weightUpdate.sampleCount,
+            metrics: weightUpdate.metrics
+        )
+        try await apiClient.submitSecAggMaskedInput(maskedInputRequest)
+
+        // Phase 3: Unmasking
+        let unmaskInfo = try await apiClient.getSecAggUnmaskInfo(
+            sessionId: session.sessionId,
+            deviceId: deviceId
+        )
+
+        if unmaskInfo.unmaskingRequired {
+            let unmaskData = try await secAgg.provideUnmaskingShares(
+                droppedClientIndices: unmaskInfo.droppedClientIndices
+            )
+            let unmaskRequest = SecAggUnmaskRequest(
+                sessionId: session.sessionId,
+                deviceId: deviceId,
+                unmaskData: unmaskData.base64EncodedString()
+            )
+            try await apiClient.submitSecAggUnmask(unmaskRequest)
+        }
+
+        await secAgg.reset()
+
+        let roundResult = RoundResult(
+            roundId: roundId,
+            trainingResult: trainingResult,
+            uploadSucceeded: true,
+            completedAt: Date()
+        )
+
+        if configuration.enableLogging {
+            logger.info("SecAgg round \(roundId) completed: \(trainingResult.sampleCount) samples")
+        }
+
+        return roundResult
+    }
+
     /// Trains a model locally without uploading weights.
     ///
     /// Useful for testing and validation.
@@ -603,6 +732,7 @@ public final class EdgeMLClient: @unchecked Sendable {
     ///   - modelId: Identifier of the model to train.
     ///   - dataProvider: Closure that provides training data.
     ///   - constraints: Background execution constraints.
+    #if os(iOS)
     public func enableBackgroundTraining(
         modelId: String,
         dataProvider: @escaping @Sendable () -> MLBatchProvider,
@@ -630,6 +760,7 @@ public final class EdgeMLClient: @unchecked Sendable {
             logger.info("Background training disabled")
         }
     }
+    #endif
 
     // MARK: - Event Tracking
 

@@ -165,6 +165,7 @@ final class EdgeMLClientTests: XCTestCase {
 
     // MARK: - Background Training Tests
 
+    #if os(iOS)
     func testBackgroundTrainingConfiguration() {
         let client = EdgeMLClient(
             deviceAccessToken: "test-device-token",
@@ -182,6 +183,7 @@ final class EdgeMLClientTests: XCTestCase {
         // Disable should also not crash
         client.disableBackgroundTraining()
     }
+    #endif
 }
 
 // MARK: - Mock Batch Provider
