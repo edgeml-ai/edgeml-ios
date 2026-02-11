@@ -14,7 +14,7 @@ final class NetworkMonitorTests: XCTestCase {
         let monitor = NetworkMonitor.shared
         let expectation = XCTestExpectation(description: "Handler called")
 
-        let token = monitor.addHandler { isConnected in
+        let token = monitor.addHandler { _ in
             // Handler is called immediately with current status
             expectation.fulfill()
         }

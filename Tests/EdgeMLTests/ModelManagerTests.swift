@@ -47,14 +47,14 @@ final class ModelManagerTests: XCTestCase {
         mockCache.latestModelId = "m1"
         let manager = makeManager()
         // The mock returns nil (can't create real EdgeMLModel), but verifies delegation
-        let _ = manager.getCachedModel(modelId: "m1")
+        _ = manager.getCachedModel(modelId: "m1")
         XCTAssertTrue(mockCache.getLatestCalled)
         XCTAssertEqual(mockCache.getLatestCalledWith, "m1")
     }
 
     func testGetByVersionDelegatesToCache() {
         let manager = makeManager()
-        let _ = manager.getCachedModel(modelId: "m1", version: "2.0")
+        _ = manager.getCachedModel(modelId: "m1", version: "2.0")
         XCTAssertTrue(mockCache.getCalled)
         XCTAssertEqual(mockCache.getCalledWithModelId, "m1")
         XCTAssertEqual(mockCache.getCalledWithVersion, "2.0")
@@ -139,7 +139,7 @@ final class ModelManagerTests: XCTestCase {
         ]
         let manager = makeManager()
         do {
-            let _ = try await manager.downloadModel(modelId: "m1", version: "1.0")
+            _ = try await manager.downloadModel(modelId: "m1", version: "1.0")
             XCTFail("Expected download to fail")
         } catch {
             // Network error should propagate
@@ -154,7 +154,7 @@ final class ModelManagerTests: XCTestCase {
         ]
         let manager = makeManager()
         do {
-            let _ = try await manager.downloadModel(modelId: "m1", version: "1.0")
+            _ = try await manager.downloadModel(modelId: "m1", version: "1.0")
             XCTFail("Expected download to fail with server error")
         } catch {
             XCTAssertNotNil(error)

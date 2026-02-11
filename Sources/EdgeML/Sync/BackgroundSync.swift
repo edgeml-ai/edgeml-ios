@@ -189,7 +189,7 @@ public final class BackgroundSync: @unchecked Sendable {
         let syncTask = Task {
             do {
                 // Check for model updates
-                if let _ = try await client.checkForUpdates(modelId: modelId) {
+                if try await client.checkForUpdates(modelId: modelId) != nil {
                     // Download update
                     _ = try await client.downloadModel(modelId: modelId)
                     logger.info("Downloaded model update in background")

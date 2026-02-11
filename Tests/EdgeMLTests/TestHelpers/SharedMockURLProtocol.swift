@@ -32,8 +32,7 @@ final class SharedMockURLProtocol: URLProtocol {
             defer { buffer.deallocate() }
             while stream.hasBytesAvailable {
                 let read = stream.read(buffer, maxLength: bufferSize)
-                if read > 0 { data.append(buffer, count: read) }
-                else { break }
+                if read > 0 { data.append(buffer, count: read) } else { break }
             }
             stream.close()
             captured.httpBody = data

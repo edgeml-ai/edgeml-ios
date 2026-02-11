@@ -1,0 +1,62 @@
+# SwiftLint Configuration for EdgeML iOS SDK
+# Tuned for an ML/crypto SDK with mathematical code patterns
+
+excluded:
+  - .build
+  - Package.swift
+
+# --- Rule Configuration ---
+
+identifier_name:
+  min_length:
+    warning: 1    # Allow single-char vars (i, j, k, n, p, v, x, y) common in math/crypto
+  max_length:
+    warning: 60
+    error: 80
+  excluded:
+    - id
+
+# Trailing comma: disabled. Swift community is split on this; our codebase
+# consistently uses trailing commas in multi-line collections.
+trailing_comma:
+  mandatory_comma: false
+
+line_length:
+  warning: 150
+  error: 250
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true
+
+file_length:
+  warning: 600
+  error: 1500
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 400
+  error: 1200
+
+function_body_length:
+  warning: 80
+  error: 200
+
+cyclomatic_complexity:
+  warning: 15
+  error: 30
+
+large_tuple:
+  warning: 4
+  error: 6
+
+type_name:
+  min_length: 2
+  max_length:
+    warning: 50
+    error: 60
+
+# --- Disabled Rules ---
+disabled_rules:
+  - trailing_comma          # Style preference; our codebase uses trailing commas consistently
+  - todo                    # TODOs are valid during active development
+  - implicit_optional_initialization  # Acceptable in test setUp patterns (var x: T!)

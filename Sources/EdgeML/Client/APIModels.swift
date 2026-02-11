@@ -1,6 +1,6 @@
 import Foundation
 
-/// API response and request models for the EdgeML server.
+// API response and request models for the EdgeML server.
 
 // MARK: - Device Registration
 
