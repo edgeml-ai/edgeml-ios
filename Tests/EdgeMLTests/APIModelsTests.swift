@@ -1,6 +1,8 @@
+// swiftlint:disable file_length
 import XCTest
 @testable import EdgeML
 
+// swiftlint:disable type_body_length
 final class APIModelsTests: XCTestCase {
 
     // MARK: - Test Constants
@@ -20,6 +22,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(capabilities)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["supports_training"] as? Bool, true)
@@ -63,6 +66,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["device_identifier"] as? String, "test-device-123")
@@ -179,6 +183,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(config)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["epochs"] as? Int, 3)
@@ -220,6 +225,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         let metadata = json["metadata"] as? [String: String]
@@ -231,6 +237,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertTrue(json["metadata"] is NSNull || json["metadata"] == nil)
@@ -411,6 +418,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(update)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["model_id"] as? String, "fraud-detection")
@@ -472,6 +480,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(metrics)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["ttfc_ms"] as? Double, 45.2)
@@ -487,6 +496,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(metrics)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["ttfc_ms"] as? Double, 30.0)
@@ -533,6 +543,7 @@ final class APIModelsTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["device_id"] as? String, "device-123")
@@ -721,6 +732,7 @@ final class APIModelsTests: XCTestCase {
         )
 
         let data = try JSONEncoder().encode(request)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         // Context fields should be flattened into top-level JSON
@@ -851,6 +863,7 @@ final class APIModelsTests: XCTestCase {
         )
 
         let data = try JSONEncoder().encode(context)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertNotNil(json["device_id"])
@@ -1024,6 +1037,7 @@ final class APIModelsTests: XCTestCase {
         )
 
         let data = try JSONEncoder().encode(request)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["manufacturer"] as? String, "Apple")
@@ -1046,6 +1060,7 @@ final class APIModelsTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(event)
+        // swiftlint:disable:next force_cast
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(json["name"] as? String, "model_loaded")
@@ -1053,3 +1068,4 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNotNil(json["timestamp"])
     }
 }
+// swiftlint:enable type_body_length

@@ -160,11 +160,9 @@ actor WeightExtractor {
             let suffixes = [".weight", ".bias", "_weight", "_bias"]
 
             for (name, _) in description.inputDescriptionsByName {
-                for prefix in layerPrefixes {
-                    if name.hasPrefix(prefix) {
-                        for suffix in suffixes {
-                            keys.append(name + suffix)
-                        }
+                for prefix in layerPrefixes where name.hasPrefix(prefix) {
+                    for suffix in suffixes {
+                        keys.append(name + suffix)
                     }
                 }
             }

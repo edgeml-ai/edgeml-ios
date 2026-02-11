@@ -46,14 +46,16 @@ public final class BackgroundSync: @unchecked Sendable {
             forTaskWithIdentifier: trainingTaskIdentifier,
             using: nil
         ) { task in
-            shared.handleTrainingTask(task as! BGProcessingTask)
+            guard let processingTask = task as? BGProcessingTask else { return }
+            shared.handleTrainingTask(processingTask)
         }
 
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: syncTaskIdentifier,
             using: nil
         ) { task in
-            shared.handleSyncTask(task as! BGAppRefreshTask)
+            guard let refreshTask = task as? BGAppRefreshTask else { return }
+            shared.handleSyncTask(refreshTask)
         }
     }
 

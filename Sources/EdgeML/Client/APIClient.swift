@@ -422,6 +422,7 @@ public actor APIClient {
         request.setValue("edgeml-ios/1.0", forHTTPHeaderField: "User-Agent")
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
         if configuration.enableLogging {
             logger.debug("Request: \(request.httpMethod ?? "GET") \(request.url?.absoluteString ?? "")")
@@ -459,7 +460,10 @@ public actor APIClient {
 
                 // Handle empty responses
                 if T.self == EmptyResponse.self, data.isEmpty || data == Data("null".utf8) {
-                    return EmptyResponse() as! T
+                    guard let emptyResult = EmptyResponse() as? T else {
+                        throw EdgeMLError.decodingError(underlying: "Failed to cast EmptyResponse")
+                    }
+                    return emptyResult
                 }
 
                 do {

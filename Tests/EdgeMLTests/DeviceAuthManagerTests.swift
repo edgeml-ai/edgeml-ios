@@ -12,12 +12,12 @@ final class DeviceAuthManagerTests: XCTestCase {
         SharedMockURLProtocol.allowedHost = Self.testHost
     }
 
-    override class func setUp() {
+    override static func setUp() {
         super.setUp()
         URLProtocol.registerClass(SharedMockURLProtocol.self)
     }
 
-    override class func tearDown() {
+    override static func tearDown() {
         URLProtocol.unregisterClass(SharedMockURLProtocol.self)
         super.tearDown()
     }

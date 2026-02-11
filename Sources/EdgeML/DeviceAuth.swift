@@ -103,6 +103,7 @@ public actor DeviceAuthManager {
     private let keychainService: String
     private let storage: TokenStorage
 
+    // swiftlint:disable:next line_length
     public init(baseURL: URL, orgId: String, deviceIdentifier: String, keychainService: String = "ai.edgeml", storage: TokenStorage = KeychainTokenStorage()) {
         self.baseURL = baseURL
         self.orgId = orgId

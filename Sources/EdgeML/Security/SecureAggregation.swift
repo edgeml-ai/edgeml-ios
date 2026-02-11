@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import CryptoKit
 import os.log
@@ -82,6 +83,7 @@ public struct UInt128Wrapper: Sendable, Equatable, Comparable {
 
 // MARK: - Secure Aggregation Client
 
+// swiftlint:disable type_body_length
 /// Client-side secure aggregation using Shamir secret sharing.
 ///
 /// Implements the client portion of the SecAgg+ protocol:
@@ -825,6 +827,7 @@ public actor SecureAggregationClient {
         return Data(bytes)
     }
 }
+// swiftlint:enable type_body_length
 
 // MARK: - SecAgg+ Configuration
 
@@ -882,10 +885,10 @@ public actor SecAggPlusClient {
     // MARK: - Constants
 
     /// HKDF info string for pairwise mask key derivation.
-    private static let pairwiseMaskInfo = "secagg-pairwise-mask".data(using: .utf8)!
+    private static let pairwiseMaskInfo = Data("secagg-pairwise-mask".utf8)
 
     /// HKDF info string for share encryption key derivation.
-    private static let shareEncryptionInfo = "secagg-share-encryption".data(using: .utf8)!
+    private static let shareEncryptionInfo = Data("secagg-share-encryption".utf8)
 
     // MARK: - Properties
 
@@ -1221,4 +1224,5 @@ private func CC_SHA256(
     _ md: UnsafeMutablePointer<UInt8>?
 ) -> UnsafeMutablePointer<UInt8>?
 
+// swiftlint:disable:next type_name
 private typealias CC_LONG = UInt32

@@ -1,7 +1,9 @@
+// swiftlint:disable file_length
 import XCTest
 import CryptoKit
 @testable import EdgeML
 
+// swiftlint:disable type_body_length
 final class SecureAggregationTests: XCTestCase {
 
     // MARK: - Shamir Secret Sharing
@@ -253,6 +255,7 @@ final class SecureAggregationTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
+        // swiftlint:disable:next force_cast
         let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(dict["session_id"] as? String, "sess-123")
@@ -271,6 +274,7 @@ final class SecureAggregationTests: XCTestCase {
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(request)
+        // swiftlint:disable:next force_cast
         let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         XCTAssertEqual(dict["session_id"] as? String, "sess-123")
@@ -965,11 +969,11 @@ final class SecureAggregationTests: XCTestCase {
         // Derive keys from both shared secrets
         let keyAB = sharedAB.hkdfDerivedSymmetricKey(
             using: SHA256.self, salt: Data(),
-            sharedInfo: "test".data(using: .utf8)!, outputByteCount: 32
+            sharedInfo: Data("test".utf8), outputByteCount: 32
         )
         let keyBA = sharedBA.hkdfDerivedSymmetricKey(
             using: SHA256.self, salt: Data(),
-            sharedInfo: "test".data(using: .utf8)!, outputByteCount: 32
+            sharedInfo: Data("test".utf8), outputByteCount: 32
         )
 
         // Encrypt with keyAB, decrypt with keyBA
@@ -1670,3 +1674,4 @@ final class SecureAggregationTests: XCTestCase {
         // First 4 bytes of each hash interpreted as big-endian UInt32.
     }
 }
+// swiftlint:enable type_body_length

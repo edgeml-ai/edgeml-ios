@@ -5,6 +5,7 @@ import os.log
 import UIKit
 #endif
 
+// swiftlint:disable type_body_length
 /// Main entry point for the EdgeML SDK.
 ///
 /// `EdgeMLClient` provides a high-level API for:
@@ -879,3 +880,4 @@ public final class EdgeMLClient: @unchecked Sendable {
         #endif
     }
 }
+// swiftlint:enable type_body_length
