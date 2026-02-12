@@ -61,10 +61,10 @@ jobs:
           xcrun xccov view --report --json TestResults.xcresult > coverage.json
           xcrun xccov view --report TestResults.xcresult
 
-      - name: Convert coverage to lcov
+      - name: Convert coverage to SonarCloud generic format
         run: |
           python3 << 'PYEOF'
-          import json, subprocess
+          import json, subprocess, xml.etree.ElementTree as ET
 
           result = subprocess.run(
               ["xcrun", "xccov", "view", "--report", "--json", "TestResults.xcresult"],
@@ -72,27 +72,31 @@ jobs:
           )
           report = json.loads(result.stdout)
 
-          with open("coverage.lcov", "w") as f:
-              for target in report.get("targets", []):
-                  for src in target.get("files", []):
-                      path = src.get("path", "")
-                      if not path or "/Tests/" in path:
-                          continue
-                      f.write(f"SF:{path}\n")
-                      lines_out = subprocess.run(
-                          ["xcrun", "xccov", "view", "--file", path, "TestResults.xcresult"],
-                          capture_output=True, text=True,
-                      )
-                      for num, raw_line in enumerate(lines_out.stdout.splitlines(), 1):
-                          col = raw_line.split(":")[0].strip() if ":" in raw_line else ""
-                          if col and col != "*":
-                              try:
-                                  f.write(f"DA:{num},{int(col)}\n")
-                              except ValueError:
-                                  pass
-                      f.write("end_of_record\n")
+          root = ET.Element("coverage", version="1")
+          for target in report.get("targets", []):
+              for src in target.get("files", []):
+                  path = src.get("path", "")
+                  if not path or "/Tests/" in path:
+                      continue
+                  file_el = ET.SubElement(root, "file", path=path)
+                  lines_out = subprocess.run(
+                      ["xcrun", "xccov", "view", "--file", path, "TestResults.xcresult"],
+                      capture_output=True, text=True,
+                  )
+                  for num, raw_line in enumerate(lines_out.stdout.splitlines(), 1):
+                      col = raw_line.split(":")[0].strip() if ":" in raw_line else ""
+                      if col and col != "*":
+                          try:
+                              hits = int(col)
+                              ET.SubElement(file_el, "lineToCover",
+                                  lineNumber=str(num), covered=("true" if hits > 0 else "false"))
+                          except ValueError:
+                              pass
 
-          print("Generated coverage.lcov")
+          tree = ET.ElementTree(root)
+          ET.indent(tree)
+          tree.write("sonar-coverage.xml", xml_declaration=True, encoding="UTF-8")
+          print("Generated sonar-coverage.xml")
           PYEOF
 
       - name: SonarCloud Scan
