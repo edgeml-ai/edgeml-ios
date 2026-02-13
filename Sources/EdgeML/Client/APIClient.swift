@@ -16,6 +16,7 @@ public actor APIClient {
     private let jsonDecoder: JSONDecoder
     private let jsonEncoder: JSONEncoder
     private let logger: Logger
+    private let pinningDelegate: CertificatePinningDelegate?
 
     private var deviceToken: String?
 
@@ -38,7 +39,14 @@ public actor APIClient {
         sessionConfig.timeoutIntervalForRequest = configuration.requestTimeout
         sessionConfig.timeoutIntervalForResource = configuration.downloadTimeout
         sessionConfig.waitsForConnectivity = true
-        self.session = URLSession(configuration: sessionConfig)
+        if configuration.pinnedCertificateHashes.isEmpty {
+            self.pinningDelegate = nil
+            self.session = URLSession(configuration: sessionConfig)
+        } else {
+            let delegate = CertificatePinningDelegate(pinnedHashes: configuration.pinnedCertificateHashes)
+            self.pinningDelegate = delegate
+            self.session = URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
+        }
 
         // Configure JSON decoder
         self.jsonDecoder = JSONDecoder()
@@ -62,6 +70,7 @@ public actor APIClient {
         sessionConfiguration.timeoutIntervalForRequest = configuration.requestTimeout
         sessionConfiguration.timeoutIntervalForResource = configuration.downloadTimeout
         self.session = URLSession(configuration: sessionConfiguration)
+        self.pinningDelegate = nil
 
         self.jsonDecoder = JSONDecoder()
         self.jsonDecoder.dateDecodingStrategy = .iso8601
