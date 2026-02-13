@@ -64,6 +64,42 @@ public class DeviceMetadata {
         #endif
     }
 
+    /// Maps this device to an EdgeML server device profile key.
+    ///
+    /// The server uses these keys to select the optimal model format,
+    /// quantization settings, and MNN runtime config for the device.
+    ///
+    /// - Returns: Device profile key (e.g. "iphone_15_pro", "iphone_14").
+    public var deviceProfile: String {
+        let model = self.model.lowercased()
+
+        // iPhone 15 Pro / Pro Max (A17 Pro, 8GB)
+        // Machine IDs: iPhone16,1 (15 Pro) iPhone16,2 (15 Pro Max)
+        if model.contains("iphone16,1") || model.contains("iphone16,2") {
+            return "iphone_15_pro"
+        }
+
+        // iPhone 16 Pro / Pro Max (A18 Pro, 8GB) — map to 15 Pro tier
+        // Machine IDs: iPhone17,1 (16 Pro) iPhone17,2 (16 Pro Max)
+        if model.contains("iphone17,1") || model.contains("iphone17,2") {
+            return "iphone_15_pro"
+        }
+
+        // iPhone 15 / 15 Plus (A16, 6GB)
+        // iPhone 16 / 16 Plus (A18, 8GB) — still map to iphone_14 tier for non-Pro
+        if model.contains("iphone15,") || model.contains("iphone16,") || model.contains("iphone17,") {
+            return "iphone_14"
+        }
+
+        // iPhone 14 family (A15/A16, 6GB)
+        if model.contains("iphone14,") {
+            return "iphone_14"
+        }
+
+        // Older or unknown iPhones — conservative fallback
+        return "iphone_14"
+    }
+
     /// Get CPU architecture (arm64)
     public var cpuArchitecture: String {
         #if arch(arm64)

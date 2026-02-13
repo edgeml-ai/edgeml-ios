@@ -13,6 +13,7 @@ public actor ModelManager {
     private let configuration: EdgeMLConfiguration
     private let logger: Logger
     private let fileManager = FileManager.default
+    private let deviceMetadata = DeviceMetadata()
 
     private var downloadTasks: [String: Task<EdgeMLModel, Error>] = [:]
 
@@ -79,7 +80,10 @@ public actor ModelManager {
             // Get metadata
             let metadata = try await apiClient.getModelMetadata(modelId: modelId, version: version)
 
-            // Get download URL
+            // Auto-detect device profile for optimal format selection
+            let deviceProfile = self.deviceMetadata.deviceProfile
+
+            // Get download URL — always CoreML on iOS
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
                 version: version,
@@ -141,6 +145,20 @@ public actor ModelManager {
 
             // Store in memory cache
             await self.modelCache.store(model)
+
+            // Fetch device-specific MNN runtime config if available
+            do {
+                let mnnConfig = try await self.apiClient.getDeviceConfig(
+                    modelId: modelId,
+                    deviceType: deviceProfile
+                )
+                model.mnnConfig = mnnConfig
+            } catch {
+                // No MNN config available — standard CoreML runtime
+                if self.configuration.enableLogging {
+                    self.logger.debug("No MNN config for \(modelId) on \(deviceProfile)")
+                }
+            }
 
             if self.configuration.enableLogging {
                 self.logger.info("Model downloaded: \(modelId)@\(version)")

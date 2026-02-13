@@ -227,6 +227,35 @@ public actor APIClient {
         return try await performRequest(urlRequest)
     }
 
+    /// Gets the device-specific MNN runtime config for optimized inference.
+    /// - Parameters:
+    ///   - modelId: Model identifier.
+    ///   - deviceType: Device profile key (e.g. "iphone_15_pro").
+    /// - Returns: MNN config dictionary.
+    public func getDeviceConfig(modelId: String, deviceType: String) async throws -> [String: Any] {
+        let url = serverURL.appendingPathComponent("api/v1/models/\(modelId)/optimized-config/\(deviceType)")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        let (data, response) = try await session.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw EdgeMLError.unknown(underlying: nil)
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw EdgeMLError.serverError(statusCode: httpResponse.statusCode, message: "No optimized config")
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw EdgeMLError.decodingError(underlying: "Invalid MNN config response")
+        }
+
+        return json
+    }
+
     /// Checks for model updates.
     /// - Parameters:
     ///   - modelId: Model identifier.
