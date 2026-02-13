@@ -84,6 +84,11 @@ public struct EdgeMLConfiguration: Sendable {
     /// Privacy configuration for upload behavior and differential privacy.
     public let privacyConfiguration: PrivacyConfiguration
 
+    /// SHA-256 hashes of pinned server public keys (base64-encoded).
+    /// When non-empty, the SDK validates the server certificate against these pins.
+    /// Leave empty to use system default certificate validation.
+    public let pinnedCertificateHashes: [String]
+
     // MARK: - Backward-Compatible Accessors
 
     /// Maximum number of retry attempts for failed requests.
@@ -140,7 +145,8 @@ public struct EdgeMLConfiguration: Sendable {
         autoCheckUpdates: Bool = true,
         updateCheckInterval: TimeInterval = 3600, // 1 hour
         training: TrainingPolicy = TrainingPolicy(),
-        privacyConfiguration: PrivacyConfiguration = .standard
+        privacyConfiguration: PrivacyConfiguration = .standard,
+        pinnedCertificateHashes: [String] = []
     ) {
         self.network = network
         self.logging = logging
@@ -149,6 +155,7 @@ public struct EdgeMLConfiguration: Sendable {
         self.updateCheckInterval = updateCheckInterval
         self.training = training
         self.privacyConfiguration = privacyConfiguration
+        self.pinnedCertificateHashes = pinnedCertificateHashes
     }
 
     // MARK: - Convenience Initializer (flat parameters)
@@ -187,7 +194,8 @@ public struct EdgeMLConfiguration: Sendable {
                 requireChargingForTraining: requireChargingForTraining,
                 minimumBatteryLevel: minimumBatteryLevel
             ),
-            privacyConfiguration: privacyConfiguration
+            privacyConfiguration: privacyConfiguration,
+            pinnedCertificateHashes: []
         )
     }
 
