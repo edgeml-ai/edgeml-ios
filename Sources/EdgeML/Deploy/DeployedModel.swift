@@ -12,10 +12,17 @@ public final class DeployedModel: @unchecked Sendable {
     /// The underlying EdgeML model.
     public let model: EdgeMLModel
 
-    internal init(name: String, engine: Engine, model: EdgeMLModel) {
+    /// Warmup benchmark results, populated when deployed with `benchmark: true`.
+    public internal(set) var warmupResult: WarmupResult?
+
+    /// Active compute delegate after benchmarking (e.g. "neural_engine", "cpu").
+    public var activeDelegate: String { warmupResult?.activeDelegate ?? "unknown" }
+
+    internal init(name: String, engine: Engine, model: EdgeMLModel, warmupResult: WarmupResult? = nil) {
         self.name = name
         self.engine = engine
         self.model = model
+        self.warmupResult = warmupResult
     }
 
     /// Run prediction with an MLFeatureProvider input.
