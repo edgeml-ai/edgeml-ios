@@ -69,7 +69,7 @@ public final class EdgeMLModel: @unchecked Sendable {
     ///   - mlModel: CoreML model.
     ///   - metadata: Model metadata.
     ///   - compiledModelURL: URL of the compiled model.
-    internal init(
+    public init(
         id: String,
         version: String,
         mlModel: MLModel,

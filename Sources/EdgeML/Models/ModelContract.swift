@@ -97,17 +97,8 @@ public struct ModelContract: Sendable {
     /// Model version.
     public let version: String
 
-    /// Expected input tensor shape (e.g., [1, 28, 28, 1] for MNIST).
-    public let inputShape: [Int]
-
-    /// Expected output tensor shape (e.g., [1, 10] for 10-class classifier).
-    public let outputShape: [Int]
-
-    /// Input tensor data type (e.g., "FLOAT32", "MultiArray").
-    public let inputType: String
-
-    /// Output tensor data type (e.g., "FLOAT32", "MultiArray").
-    public let outputType: String
+    /// Input/output tensor specification.
+    public let tensorSpec: TensorSpec
 
     /// Whether the model supports on-device gradient-based training.
     public let hasTrainingSignature: Bool
@@ -115,6 +106,46 @@ public struct ModelContract: Sendable {
     /// Available signature or capability keys (e.g., ["train", "infer", "save"]).
     public let signatureKeys: [String]
 
+    /// Describes the shape and data type of a model's input and output tensors.
+    public struct TensorSpec: Sendable {
+        /// Expected input tensor shape (e.g., [1, 28, 28, 1] for MNIST).
+        public let inputShape: [Int]
+        /// Expected output tensor shape (e.g., [1, 10] for 10-class classifier).
+        public let outputShape: [Int]
+        /// Input tensor data type (e.g., "FLOAT32", "MultiArray").
+        public let inputType: String
+        /// Output tensor data type (e.g., "FLOAT32", "MultiArray").
+        public let outputType: String
+
+        public init(inputShape: [Int], outputShape: [Int], inputType: String, outputType: String) {
+            self.inputShape = inputShape
+            self.outputShape = outputShape
+            self.inputType = inputType
+            self.outputType = outputType
+        }
+    }
+
+    /// Shorthand accessors for tensor spec fields.
+    public var inputShape: [Int] { tensorSpec.inputShape }
+    public var outputShape: [Int] { tensorSpec.outputShape }
+    public var inputType: String { tensorSpec.inputType }
+    public var outputType: String { tensorSpec.outputType }
+
+    public init(
+        modelId: String,
+        version: String,
+        tensorSpec: TensorSpec,
+        hasTrainingSignature: Bool,
+        signatureKeys: [String]
+    ) {
+        self.modelId = modelId
+        self.version = version
+        self.tensorSpec = tensorSpec
+        self.hasTrainingSignature = hasTrainingSignature
+        self.signatureKeys = signatureKeys
+    }
+
+    /// Convenience initializer maintaining the original 8-parameter signature.
     public init(
         modelId: String,
         version: String,
@@ -125,14 +156,13 @@ public struct ModelContract: Sendable {
         hasTrainingSignature: Bool,
         signatureKeys: [String]
     ) {
-        self.modelId = modelId
-        self.version = version
-        self.inputShape = inputShape
-        self.outputShape = outputShape
-        self.inputType = inputType
-        self.outputType = outputType
-        self.hasTrainingSignature = hasTrainingSignature
-        self.signatureKeys = signatureKeys
+        self.init(
+            modelId: modelId,
+            version: version,
+            tensorSpec: TensorSpec(inputShape: inputShape, outputShape: outputShape, inputType: inputType, outputType: outputType),
+            hasTrainingSignature: hasTrainingSignature,
+            signatureKeys: signatureKeys
+        )
     }
 
     /// Total number of input elements expected (product of input shape dimensions).
@@ -149,6 +179,12 @@ public struct ModelContract: Sendable {
     /// (e.g., "[Float][784] shape=[1, 28, 28, 1] type=FLOAT32").
     public var inputDescription: String {
         "[Float][\(inputSize)] shape=\(inputShape) type=\(inputType)"
+    }
+
+    /// Human-readable description of output
+    /// (e.g., "[Float][10] shape=[1, 10] type=FLOAT32").
+    public var outputDescription: String {
+        "[Float][\(outputSize)] shape=\(outputShape) type=\(outputType)"
     }
 
     /// Validate that a float array is compatible with this model's input.
