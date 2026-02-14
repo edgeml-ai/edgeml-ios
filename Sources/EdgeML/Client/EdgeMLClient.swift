@@ -59,6 +59,9 @@ public final class EdgeMLClient: @unchecked Sendable {
     /// Secure aggregation client, lazily created when SecAgg is used.
     private var secAggClient: SecureAggregationClient?
 
+    /// Offline event queue for offline-first event persistence.
+    private let eventQueue: EventQueue
+
     /// Organization ID for this client.
     public let orgId: String
 
@@ -71,6 +74,35 @@ public final class EdgeMLClient: @unchecked Sendable {
     /// Heartbeat timer for automatic health reporting.
     private var heartbeatTask: Task<Void, Never>?
     private let heartbeatInterval: TimeInterval
+
+    // MARK: - Client State
+
+    /// The current client state.
+    public private(set) var currentState: ClientState = .uninitialized
+
+    /// Continuation for state stream.
+    private var stateContinuation: AsyncStream<ClientState>.Continuation?
+
+    /// Observable stream of client state transitions.
+    public lazy var state: AsyncStream<ClientState> = {
+        AsyncStream<ClientState> { continuation in
+            self.stateContinuation = continuation
+            continuation.yield(self.currentState)
+        }
+    }()
+
+    // MARK: - Download State
+
+    /// Continuation for download state stream.
+    private var downloadStateContinuation: AsyncStream<DownloadState>.Continuation?
+
+    /// Observable stream of model download state transitions.
+    public lazy var modelDownloadState: AsyncStream<DownloadState> = {
+        AsyncStream<DownloadState> { continuation in
+            self.downloadStateContinuation = continuation
+            continuation.yield(.idle)
+        }
+    }()
 
     /// Whether the device is registered with the server.
     public var isRegistered: Bool {
@@ -109,6 +141,7 @@ public final class EdgeMLClient: @unchecked Sendable {
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "EdgeMLClient")
 
         self.secureStorage = SecureStorage()
+        self.eventQueue = EventQueue.shared
         self.apiClient = APIClient(
             serverURL: serverURL,
             configuration: configuration
@@ -163,6 +196,8 @@ public final class EdgeMLClient: @unchecked Sendable {
         appVersion: String? = nil,
         metadata: [String: String]? = nil
     ) async throws -> DeviceRegistrationResponse {
+        emitState(.initializing)
+
         if configuration.enableLogging {
             logger.info("Registering device...")
         }
@@ -216,6 +251,8 @@ public final class EdgeMLClient: @unchecked Sendable {
 
         // Start automatic heartbeat
         startHeartbeat()
+
+        emitState(.ready)
 
         if configuration.enableLogging {
             logger.info("Device registered with ID: \(registration.id)")
@@ -274,6 +311,7 @@ public final class EdgeMLClient: @unchecked Sendable {
     public func stopHeartbeat() {
         heartbeatTask?.cancel()
         heartbeatTask = nil
+        emitState(.closed)
     }
 
     // MARK: - Device Groups
@@ -598,7 +636,11 @@ public final class EdgeMLClient: @unchecked Sendable {
                     deviceId: deviceId,
                     weightsData: update.weightsData,
                     sampleCount: update.sampleCount,
-                    metrics: update.metrics
+                    metrics: update.metrics,
+                    dpEpsilonUsed: update.dpEpsilonUsed,
+                    dpNoiseScale: update.dpNoiseScale,
+                    dpMechanism: update.dpMechanism,
+                    dpClippingNorm: update.dpClippingNorm
                 )
                 weightUpdate = update
 
@@ -1150,6 +1192,9 @@ public final class EdgeMLClient: @unchecked Sendable {
 
     /// Tracks an event for an experiment.
     ///
+    /// Events are persisted to the local event queue first (offline-first),
+    /// then forwarded to the server.
+    ///
     /// - Parameters:
     ///   - experimentId: Experiment identifier.
     ///   - eventName: Name of the event.
@@ -1165,10 +1210,153 @@ public final class EdgeMLClient: @unchecked Sendable {
             timestamp: Date()
         )
 
+        // Persist to local queue first (offline-first)
+        await eventQueue.addTrainingEvent(
+            type: eventName,
+            metadata: properties
+        )
+
         try await apiClient.trackEvent(experimentId: experimentId, event: event)
     }
 
+    // MARK: - Round Management
+
+    /// Checks if this device has been selected for an active training round.
+    ///
+    /// Polls the server for rounds in the "waiting_for_updates" state for the
+    /// given model. Returns the first matching round assignment, or nil
+    /// if no round is currently active for this device.
+    ///
+    /// - Parameter modelId: The model to check for round assignments.
+    /// - Returns: The round assignment, or nil if none available.
+    /// - Throws: `EdgeMLError` if the request fails.
+    public func checkForRoundAssignment(modelId: String) async throws -> RoundAssignment? {
+        guard let deviceId = self.deviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        let rounds = try await apiClient.listRounds(
+            modelId: modelId,
+            state: "waiting_for_updates",
+            deviceId: deviceId
+        )
+
+        return rounds.first
+    }
+
+    /// Gets the current status of a training round.
+    ///
+    /// - Parameter roundId: The round to query.
+    /// - Returns: The round details.
+    /// - Throws: `EdgeMLError` if the request fails.
+    public func getRoundStatus(roundId: String) async throws -> RoundAssignment {
+        return try await apiClient.getRound(roundId: roundId)
+    }
+
+    // MARK: - Direct Inference
+
+    /// Runs inference on a model with raw input data.
+    ///
+    /// - Parameters:
+    ///   - model: The model to run inference on.
+    ///   - input: Input feature provider.
+    /// - Returns: Model prediction output.
+    /// - Throws: Error if inference fails.
+    public func runInference(
+        model: EdgeMLModel,
+        input: MLFeatureProvider
+    ) throws -> MLFeatureProvider {
+        return try model.predict(input: input)
+    }
+
+    /// Classifies input and returns top-K predictions sorted by confidence.
+    ///
+    /// - Parameters:
+    ///   - model: The model to classify with.
+    ///   - input: Input feature provider.
+    ///   - topK: Number of top predictions to return (default: 5).
+    /// - Returns: Array of (feature name, confidence) pairs.
+    /// - Throws: Error if inference fails.
+    public func classify(
+        model: EdgeMLModel,
+        input: MLFeatureProvider,
+        topK: Int = 5
+    ) throws -> [(String, Double)] {
+        let output = try model.predict(input: input)
+        var results: [(String, Double)] = []
+
+        for name in output.featureNames {
+            if let value = output.featureValue(for: name) {
+                switch value.type {
+                case .double:
+                    results.append((name, value.doubleValue))
+                case .int64:
+                    results.append((name, Double(value.int64Value)))
+                case .multiArray:
+                    if let array = value.multiArrayValue {
+                        for i in 0..<array.count {
+                            results.append(("\(name)_\(i)", array[i].doubleValue))
+                        }
+                    }
+                case .dictionary:
+                    if let dict = value.dictionaryValue as? [String: NSNumber] {
+                        for (key, val) in dict {
+                            results.append((key, val.doubleValue))
+                        }
+                    }
+                default:
+                    break
+                }
+            }
+        }
+
+        results.sort { $0.1 > $1.1 }
+        return Array(results.prefix(topK))
+    }
+
+    /// Runs batch inference on a model.
+    ///
+    /// - Parameters:
+    ///   - model: The model to run inference on.
+    ///   - inputs: Batch of input feature providers.
+    /// - Returns: Batch of predictions.
+    /// - Throws: Error if inference fails.
+    public func runBatchInference(
+        model: EdgeMLModel,
+        inputs: MLBatchProvider
+    ) throws -> MLBatchProvider {
+        return try model.predict(batch: inputs)
+    }
+
+    /// Runs inference with a preprocessing step.
+    ///
+    /// - Parameters:
+    ///   - model: The model to run inference on.
+    ///   - currentInput: Raw input data.
+    ///   - preprocess: Closure that transforms raw input into model-compatible features.
+    /// - Returns: Model prediction output.
+    /// - Throws: Error if preprocessing or inference fails.
+    public func runPipelinedInference(
+        model: EdgeMLModel,
+        currentInput: Any,
+        preprocess: (Any) throws -> MLFeatureProvider
+    ) throws -> MLFeatureProvider {
+        let features = try preprocess(currentInput)
+        return try model.predict(input: features)
+    }
+
     // MARK: - Private Methods
+
+    /// Emits a new client state.
+    private func emitState(_ newState: ClientState) {
+        currentState = newState
+        stateContinuation?.yield(newState)
+    }
+
+    /// Emits a new download state.
+    private func emitDownloadState(_ newState: DownloadState) {
+        downloadStateContinuation?.yield(newState)
+    }
 
     /// Device info collected during registration.
     private struct LocalDeviceInfo {

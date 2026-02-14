@@ -117,6 +117,18 @@ public final class SecureStorage: @unchecked Sendable {
         return try retrieve(account: Self.clientDeviceIdentifierAccount)
     }
 
+    // MARK: - Generic Key-Value Storage
+
+    /// Stores a string value securely under a custom key.
+    public func setString(_ value: String, forKey key: String) throws {
+        try store(value: value, account: key)
+    }
+
+    /// Retrieves a string value stored under a custom key.
+    public func getString(forKey key: String) throws -> String? {
+        return try retrieve(account: key)
+    }
+
     // MARK: - Clear All
 
     /// Clears all stored credentials.

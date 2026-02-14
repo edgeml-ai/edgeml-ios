@@ -137,15 +137,55 @@ public struct DeviceRegistrationResponse: Codable, Sendable {
 public struct HeartbeatRequest: Codable, Sendable {
     /// Optional metadata to merge with existing device metadata.
     public let metadata: [String: String]?
+    /// SDK version.
+    public let sdkVersion: String?
+    /// OS version.
+    public let osVersion: String?
+    /// App version.
+    public let appVersion: String?
+    /// Battery level (0-100).
+    public let batteryLevel: Int?
+    /// Whether device is charging.
+    public let isCharging: Bool?
+    /// Available storage in MB.
+    public let availableStorageMb: Int?
+    /// Available memory in MB.
+    public let availableMemoryMb: Int?
+    /// Network type (e.g., "wifi", "cellular").
+    public let networkType: String?
 
     enum CodingKeys: String, CodingKey {
         case metadata
+        case sdkVersion = "sdk_version"
+        case osVersion = "os_version"
+        case appVersion = "app_version"
+        case batteryLevel = "battery_level"
+        case isCharging = "is_charging"
+        case availableStorageMb = "available_storage_mb"
+        case availableMemoryMb = "available_memory_mb"
+        case networkType = "network_type"
     }
 
     public init(
-        metadata: [String: String]? = nil
+        metadata: [String: String]? = nil,
+        sdkVersion: String? = nil,
+        osVersion: String? = nil,
+        appVersion: String? = nil,
+        batteryLevel: Int? = nil,
+        isCharging: Bool? = nil,
+        availableStorageMb: Int? = nil,
+        availableMemoryMb: Int? = nil,
+        networkType: String? = nil
     ) {
         self.metadata = metadata
+        self.sdkVersion = sdkVersion
+        self.osVersion = osVersion
+        self.appVersion = appVersion
+        self.batteryLevel = batteryLevel
+        self.isCharging = isCharging
+        self.availableStorageMb = availableStorageMb
+        self.availableMemoryMb = availableMemoryMb
+        self.networkType = networkType
     }
 }
 
@@ -208,6 +248,8 @@ public struct DeviceGroup: Codable, Sendable {
 public struct DeviceGroupsResponse: Codable, Sendable {
     /// List of groups device belongs to.
     public let groups: [DeviceGroup]
+    /// Total count of groups.
+    public let count: Int?
 }
 
 // MARK: - Device Info
@@ -453,12 +495,27 @@ public struct DownloadURLResponse: Codable, Sendable {
     public let checksum: String
     /// File size in bytes.
     public let fileSize: UInt64
+    /// Quantization type (e.g., "float32", "float16", "int8").
+    public let quantization: String?
+    /// Recommended delegates for this model variant.
+    public let recommendedDelegates: [String]?
+    /// Model input tensor shape.
+    public let inputShape: [Int]?
+    /// Model output tensor shape.
+    public let outputShape: [Int]?
+    /// Whether the model includes a training signature.
+    public let hasTrainingSignature: Bool?
 
     enum CodingKeys: String, CodingKey {
         case url
         case expiresAt = "expires_at"
         case checksum
         case fileSize = "file_size"
+        case quantization
+        case recommendedDelegates = "recommended_delegates"
+        case inputShape = "input_shape"
+        case outputShape = "output_shape"
+        case hasTrainingSignature = "has_training_signature"
     }
 }
 
@@ -546,6 +603,14 @@ public struct WeightUpdate: Codable, Sendable {
     public let sampleCount: Int
     /// Training metrics.
     public let metrics: [String: Double]
+    /// Epsilon used for this update (if DP was applied).
+    public let dpEpsilonUsed: Double?
+    /// Noise scale (sigma) applied (if DP was applied).
+    public let dpNoiseScale: Double?
+    /// Noise mechanism used ("gaussian" or "laplace"), nil if no DP.
+    public let dpMechanism: String?
+    /// L2 clipping norm used (if DP was applied).
+    public let dpClippingNorm: Double?
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
@@ -554,6 +619,34 @@ public struct WeightUpdate: Codable, Sendable {
         case weightsData = "weights_data"
         case sampleCount = "sample_count"
         case metrics
+        case dpEpsilonUsed = "dp_epsilon_used"
+        case dpNoiseScale = "dp_noise_scale"
+        case dpMechanism = "dp_mechanism"
+        case dpClippingNorm = "dp_clipping_norm"
+    }
+
+    public init(
+        modelId: String,
+        version: String,
+        deviceId: String?,
+        weightsData: Data,
+        sampleCount: Int,
+        metrics: [String: Double],
+        dpEpsilonUsed: Double? = nil,
+        dpNoiseScale: Double? = nil,
+        dpMechanism: String? = nil,
+        dpClippingNorm: Double? = nil
+    ) {
+        self.modelId = modelId
+        self.version = version
+        self.deviceId = deviceId
+        self.weightsData = weightsData
+        self.sampleCount = sampleCount
+        self.metrics = metrics
+        self.dpEpsilonUsed = dpEpsilonUsed
+        self.dpNoiseScale = dpNoiseScale
+        self.dpMechanism = dpMechanism
+        self.dpClippingNorm = dpClippingNorm
     }
 }
 
@@ -567,11 +660,51 @@ public struct TrackingEvent: Codable, Sendable {
     public let properties: [String: String]
     /// Timestamp.
     public let timestamp: Date
+    /// Device identifier.
+    public let deviceId: String?
+    /// Model identifier.
+    public let modelId: String?
+    /// Model version.
+    public let version: String?
+    /// Event type classification.
+    public let eventType: String?
+    /// Numeric metrics.
+    public let metrics: [String: Double]?
+    /// String metadata.
+    public let metadata: [String: String]?
 
-    public init(name: String, properties: [String: String] = [:], timestamp: Date = Date()) {
+    enum CodingKeys: String, CodingKey {
+        case name
+        case properties
+        case timestamp
+        case deviceId = "device_id"
+        case modelId = "model_id"
+        case version
+        case eventType = "event_type"
+        case metrics
+        case metadata
+    }
+
+    public init(
+        name: String,
+        properties: [String: String] = [:],
+        timestamp: Date = Date(),
+        deviceId: String? = nil,
+        modelId: String? = nil,
+        version: String? = nil,
+        eventType: String? = nil,
+        metrics: [String: Double]? = nil,
+        metadata: [String: String]? = nil
+    ) {
         self.name = name
         self.properties = properties
         self.timestamp = timestamp
+        self.deviceId = deviceId
+        self.modelId = modelId
+        self.version = version
+        self.eventType = eventType
+        self.metrics = metrics
+        self.metadata = metadata
     }
 }
 
@@ -739,6 +872,221 @@ public struct InferenceEventContext: Codable, Sendable {
         self.version = version
         self.modality = modality
         self.sessionId = sessionId
+    }
+}
+
+// MARK: - Round Management
+
+/// A federated learning round returned from the server.
+public struct RoundAssignment: Codable, Sendable {
+    /// Round UUID.
+    public let id: String
+    /// Organization ID.
+    public let orgId: String
+    /// Model ID.
+    public let modelId: String
+    /// Version ID.
+    public let versionId: String
+    /// Round state.
+    public let state: String
+    /// Minimum clients required.
+    public let minClients: Int
+    /// Maximum clients allowed.
+    public let maxClients: Int
+    /// Client selection strategy.
+    public let clientSelectionStrategy: String
+    /// Aggregation type.
+    public let aggregationType: String
+    /// Round timeout in minutes.
+    public let timeoutMinutes: Int
+    /// Whether differential privacy is enabled.
+    public let differentialPrivacy: Bool
+    /// DP epsilon value.
+    public let dpEpsilon: Double?
+    /// DP delta value.
+    public let dpDelta: Double?
+    /// Whether secure aggregation is enabled.
+    public let secureAggregation: Bool
+    /// SecAgg threshold.
+    public let secaggThreshold: Int?
+    /// Number of selected clients.
+    public let selectedClientCount: Int
+    /// Number of received updates.
+    public let receivedUpdateCount: Int
+    /// When the round was created.
+    public let createdAt: String
+    /// When client selection started.
+    public let clientSelectionStartedAt: String?
+    /// When aggregation completed.
+    public let aggregationCompletedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case orgId = "org_id"
+        case modelId = "model_id"
+        case versionId = "version_id"
+        case state
+        case minClients = "min_clients"
+        case maxClients = "max_clients"
+        case clientSelectionStrategy = "client_selection_strategy"
+        case aggregationType = "aggregation_type"
+        case timeoutMinutes = "timeout_minutes"
+        case differentialPrivacy = "differential_privacy"
+        case dpEpsilon = "dp_epsilon"
+        case dpDelta = "dp_delta"
+        case secureAggregation = "secure_aggregation"
+        case secaggThreshold = "secagg_threshold"
+        case selectedClientCount = "selected_client_count"
+        case receivedUpdateCount = "received_update_count"
+        case createdAt = "created_at"
+        case clientSelectionStartedAt = "client_selection_started_at"
+        case aggregationCompletedAt = "aggregation_completed_at"
+    }
+}
+
+/// Response wrapping a list of rounds.
+public struct RoundsListResponse: Codable, Sendable {
+    /// List of round assignments.
+    public let rounds: [RoundAssignment]
+}
+
+// MARK: - Health Check
+
+/// Response from the health check endpoint.
+public struct HealthResponse: Codable, Sendable {
+    /// Server health status.
+    public let status: String
+    /// Server version.
+    public let version: String?
+    /// Server timestamp.
+    public let timestamp: String?
+}
+
+// MARK: - Model Metadata (full model)
+
+/// Response from the model metadata endpoint.
+public struct ModelResponse: Codable, Sendable {
+    /// Model UUID.
+    public let id: String
+    /// Organization ID.
+    public let orgId: String
+    /// Model name.
+    public let name: String
+    /// Model framework.
+    public let framework: String
+    /// Model use case.
+    public let useCase: String
+    /// Optional description.
+    public let description: String?
+    /// Number of versions.
+    public let versionCount: Int
+    /// When created.
+    public let createdAt: String
+    /// When last updated.
+    public let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case orgId = "org_id"
+        case name
+        case framework
+        case useCase = "use_case"
+        case description
+        case versionCount = "version_count"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - Device Policy
+
+/// Device policy configuration from organization settings.
+public struct DevicePolicyResponse: Codable, Sendable {
+    /// Minimum battery threshold for training.
+    public let batteryThreshold: Int
+    /// Network policy (e.g., "wifi_only", "any").
+    public let networkPolicy: String
+    /// Sampling policy.
+    public let samplingPolicy: String?
+    /// Training window.
+    public let trainingWindow: String?
+
+    enum CodingKeys: String, CodingKey {
+        case batteryThreshold = "battery_threshold"
+        case networkPolicy = "network_policy"
+        case samplingPolicy = "sampling_policy"
+        case trainingWindow = "training_window"
+    }
+}
+
+// MARK: - Gradient Submission
+
+/// Request body for submitting gradients.
+public struct GradientUpdateRequest: Codable, Sendable {
+    /// Device identifier.
+    public let deviceId: String
+    /// Model identifier.
+    public let modelId: String
+    /// Model version.
+    public let version: String
+    /// Round identifier.
+    public let roundId: String
+    /// Path to stored gradients (optional).
+    public let gradientsPath: String?
+    /// Number of training samples.
+    public let numSamples: Int
+    /// Training time in milliseconds.
+    public let trainingTimeMs: Int64
+    /// Training metrics.
+    public let metrics: GradientTrainingMetrics
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case modelId = "model_id"
+        case version
+        case roundId = "round_id"
+        case gradientsPath = "gradients_path"
+        case numSamples = "num_samples"
+        case trainingTimeMs = "training_time_ms"
+        case metrics
+    }
+}
+
+/// Training metrics submitted with gradient updates.
+public struct GradientTrainingMetrics: Codable, Sendable {
+    /// Training loss.
+    public let loss: Double
+    /// Training accuracy.
+    public let accuracy: Double?
+    /// Number of training batches.
+    public let numBatches: Int
+    /// Learning rate used.
+    public let learningRate: Double?
+    /// Custom metrics.
+    public let customMetrics: [String: Double]?
+
+    enum CodingKeys: String, CodingKey {
+        case loss
+        case accuracy
+        case numBatches = "num_batches"
+        case learningRate = "learning_rate"
+        case customMetrics = "custom_metrics"
+    }
+}
+
+/// Response from gradient submission.
+public struct GradientUpdateResponse: Codable, Sendable {
+    /// Whether the update was accepted.
+    public let accepted: Bool
+    /// Round identifier.
+    public let roundId: String
+    /// Optional message.
+    public let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accepted
+        case roundId = "round_id"
+        case message
     }
 }
 

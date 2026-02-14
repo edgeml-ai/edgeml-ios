@@ -11,6 +11,9 @@ public actor FederatedTrainer {
     private let logger: Logger
     private let weightExtractor: WeightExtractor
 
+    /// Differential privacy engine, created when DP is enabled.
+    private var dpEngine: DifferentialPrivacyEngine?
+
     // Store the update context from the last training session
     private var lastUpdateContext: MLUpdateContext?
     private var originalModelURL: URL?
@@ -23,6 +26,14 @@ public actor FederatedTrainer {
         self.configuration = configuration
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "FederatedTrainer")
         self.weightExtractor = WeightExtractor()
+
+        let privacyConfig = configuration.privacyConfiguration
+        if privacyConfig.enableDifferentialPrivacy {
+            self.dpEngine = DifferentialPrivacyEngine(
+                config: privacyConfig,
+                secureStorage: SecureStorage()
+            )
+        }
     }
 
     // MARK: - Training
@@ -70,20 +81,28 @@ public actor FederatedTrainer {
         let loss = extractLoss(from: updateContext)
         let accuracy = extractAccuracy(from: updateContext)
 
+        var metrics: [String: Double] = [
+            "epochs": Double(config.epochs),
+            "batch_size": Double(config.batchSize),
+            "learning_rate": config.learningRate,
+            "epochs_completed": Double(epochsCompleted),
+            "thermal_adjustments_count": Double(ThermalMonitor.shared.thermalAdjustmentCount)
+        ]
+        if thermalAborted {
+            metrics["thermal_aborted"] = 1.0
+        }
+
         let result = TrainingResult(
             sampleCount: data.count,
             loss: loss,
             accuracy: accuracy,
             trainingTime: trainingTime,
-            metrics: [
-                "epochs": Double(config.epochs),
-                "batch_size": Double(config.batchSize),
-                "learning_rate": config.learningRate
-            ]
+            metrics: metrics
         )
 
         if configuration.enableLogging {
-            logger.info("Training completed: \(data.count) samples in \(String(format: "%.2f", trainingTime))s")
+            let thermalInfo = thermalAborted ? " (thermal aborted at epoch \(epochsCompleted)/\(config.epochs))" : ""
+            logger.info("Training completed: \(data.count) samples in \(String(format: "%.2f", trainingTime))s\(thermalInfo)")
         }
 
         return result
@@ -113,6 +132,9 @@ public actor FederatedTrainer {
         if configuration.enableLogging {
             logger.info("Extracting weight updates...")
         }
+
+        // Pass DP engine to weight extractor if configured
+        await weightExtractor.setDPEngine(dpEngine)
 
         // Try to extract weight delta
         var weightsData: Data
@@ -147,8 +169,15 @@ public actor FederatedTrainer {
             )
         }
 
-        // Metrics are already in the correct format from training result
-        let metrics = trainingResult.metrics
+        // Merge DP metadata into training metrics
+        var metrics = trainingResult.metrics
+        let dpResultVal = await weightExtractor.dpResult
+        if let dpRes = dpResultVal {
+            metrics["dp_epsilon_used"] = dpRes.epsilonUsed
+            metrics["dp_clipping_norm"] = dpRes.clippingNorm
+            metrics["dp_noise_scale"] = dpRes.noiseScale
+            metrics["dp_mechanism"] = dpRes.mechanism == .gaussian ? 0.0 : 1.0
+        }
 
         if configuration.enableLogging {
             logger.info("Weight extraction completed: \(weightsData.count) bytes (\(updateFormat))")
@@ -160,11 +189,21 @@ public actor FederatedTrainer {
             deviceId: nil,
             weightsData: weightsData,
             sampleCount: trainingResult.sampleCount,
-            metrics: metrics
+            metrics: metrics,
+            dpEpsilonUsed: dpResultVal?.epsilonUsed,
+            dpNoiseScale: dpResultVal?.noiseScale,
+            dpMechanism: dpResultVal?.mechanism.rawValue,
+            dpClippingNorm: dpResultVal?.clippingNorm
         )
     }
 
     // MARK: - Private Methods
+
+    /// Number of epochs actually completed (may differ from requested if thermal-aborted).
+    private(set) var epochsCompleted: Int = 0
+
+    /// Whether training was aborted due to thermal state.
+    private(set) var thermalAborted: Bool = false
 
     private func performTraining(
         modelURL: URL,
@@ -172,6 +211,11 @@ public actor FederatedTrainer {
         config: TrainingConfig
     ) async throws -> MLUpdateContext {
         self.currentTrainingConfig = config
+        self.epochsCompleted = 0
+        self.thermalAborted = false
+
+        let thermalPolicy = configuration.training.thermalPolicy
+        let thermalMonitor = ThermalMonitor.shared
 
         // CoreML's MLUpdateTask runs one "update pass" as defined in the model's
         // compiled training spec. For multi-epoch training, we chain update tasks:
@@ -188,6 +232,27 @@ public actor FederatedTrainer {
         }
 
         for epoch in 0..<max(config.epochs, 1) {
+            // Check thermal state before each epoch
+            let adjustments = thermalMonitor.getAdjustments(for: thermalPolicy)
+
+            if adjustments.shouldAbort {
+                if configuration.enableLogging {
+                    logger.warning("Training aborted due to thermal state: \(thermalMonitor.currentState.rawValue)")
+                }
+                thermalAborted = true
+                thermalMonitor.recordAdjustment()
+                break
+            }
+
+            // Apply epoch delay if thermal state warrants it
+            if adjustments.epochDelayMs > 0 {
+                if configuration.enableLogging {
+                    logger.info("Thermal delay: \(adjustments.epochDelayMs)ms before epoch \(epoch)")
+                }
+                thermalMonitor.recordAdjustment()
+                try await Task.sleep(nanoseconds: adjustments.epochDelayMs * 1_000_000)
+            }
+
             let context = try await runSingleUpdatePass(
                 modelURL: currentModelURL,
                 trainingData: trainingData,
@@ -196,6 +261,7 @@ public actor FederatedTrainer {
             )
 
             lastContext = context
+            epochsCompleted += 1
 
             // For subsequent epochs, write the updated model to a temp location
             if epoch < config.epochs - 1 {

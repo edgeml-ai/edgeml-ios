@@ -151,6 +151,12 @@ public struct ModelContract: Sendable {
         "[Float][\(inputSize)] shape=\(inputShape) type=\(inputType)"
     }
 
+    /// Human-readable description of output
+    /// (e.g., "[Float][10] shape=[1, 10] type=FLOAT32").
+    public var outputDescription: String {
+        "[Float][\(outputSize)] shape=\(outputShape) type=\(outputType)"
+    }
+
     /// Validate that a float array is compatible with this model's input.
     ///
     /// - Parameter input: The data to validate.

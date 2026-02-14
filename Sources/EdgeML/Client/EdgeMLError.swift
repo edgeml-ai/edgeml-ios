@@ -73,6 +73,9 @@ public enum EdgeMLError: LocalizedError, Sendable {
     /// Weight upload failed.
     case uploadFailed(reason: String)
 
+    /// Local differential privacy budget has been exhausted.
+    case privacyBudgetExhausted(used: Double, max: Double)
+
     // MARK: - Keychain Errors
 
     /// Keychain operation failed.
@@ -130,6 +133,8 @@ public enum EdgeMLError: LocalizedError, Sendable {
             return "Failed to extract model weights: \(reason)"
         case .uploadFailed(let reason):
             return "Failed to upload weights: \(reason)"
+        case .privacyBudgetExhausted(let used, let max):
+            return "Privacy budget exhausted: \(String(format: "%.2f", used))/\(String(format: "%.2f", max)) epsilon used."
         case .keychainError(let status):
             return "Keychain error (status: \(status))"
         case .unknown(let underlying):
