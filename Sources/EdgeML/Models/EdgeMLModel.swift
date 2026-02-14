@@ -84,6 +84,79 @@ public final class EdgeMLModel: @unchecked Sendable {
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "EdgeMLModel")
     }
 
+    // MARK: - Local-First Initialization
+
+    /// Creates an EdgeMLModel from a pre-compiled CoreML model bundle (`.mlmodelc`).
+    ///
+    /// Use this initializer for local-first inference without any server dependency:
+    /// ```swift
+    /// let model = try EdgeMLModel(
+    ///     compiledModelURL: Bundle.main.url(forResource: "classifier", withExtension: "mlmodelc")!
+    /// )
+    /// let result = try model.predict(input: features)
+    /// ```
+    ///
+    /// To upgrade to the server platform later (FL, analytics, etc.), pass the
+    /// locally-created model to `EdgeMLClient` methods — they accept any `EdgeMLModel`.
+    ///
+    /// - Parameters:
+    ///   - compiledModelURL: URL to a compiled `.mlmodelc` bundle.
+    ///   - configuration: CoreML model configuration (compute units, etc.).
+    /// - Throws: `EdgeMLError.localModelNotFound` if the URL doesn't exist,
+    ///           or a CoreML error if the model can't be loaded.
+    public convenience init(
+        compiledModelURL: URL,
+        configuration: MLModelConfiguration = MLModelConfiguration()
+    ) throws {
+        guard FileManager.default.fileExists(atPath: compiledModelURL.path) else {
+            throw EdgeMLError.localModelNotFound(path: compiledModelURL.path)
+        }
+        let mlModel = try MLModel(contentsOf: compiledModelURL, configuration: configuration)
+        let name = compiledModelURL.deletingPathExtension().lastPathComponent
+        let metadata = ModelMetadata(
+            modelId: name,
+            version: "local",
+            checksum: "",
+            fileSize: 0,
+            createdAt: Date(),
+            format: "coreml",
+            supportsTraining: mlModel.modelDescription.isUpdatable,
+            description: nil,
+            inputSchema: nil,
+            outputSchema: nil
+        )
+        self.init(id: name, version: "local", mlModel: mlModel,
+                  metadata: metadata, compiledModelURL: compiledModelURL)
+    }
+
+    /// Creates an EdgeMLModel from an uncompiled CoreML model (`.mlmodel` or `.mlpackage`).
+    ///
+    /// The model is compiled at load time using `MLModel.compileModel(at:)`.
+    /// For production apps, prefer the `compiledModelURL:` initializer with a
+    /// pre-compiled `.mlmodelc` bundle for faster startup.
+    ///
+    /// - Parameters:
+    ///   - modelURL: URL to an `.mlmodel` or `.mlpackage` file.
+    ///   - configuration: CoreML model configuration (compute units, etc.).
+    /// - Throws: `EdgeMLError.localModelNotFound` if the URL doesn't exist,
+    ///           `EdgeMLError.modelCompilationFailed` if compilation fails,
+    ///           or a CoreML error if the compiled model can't be loaded.
+    public convenience init(
+        modelURL: URL,
+        configuration: MLModelConfiguration = MLModelConfiguration()
+    ) throws {
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            throw EdgeMLError.localModelNotFound(path: modelURL.path)
+        }
+        let compiledURL: URL
+        do {
+            compiledURL = try MLModel.compileModel(at: modelURL)
+        } catch {
+            throw EdgeMLError.modelCompilationFailed(reason: error.localizedDescription)
+        }
+        try self.init(compiledModelURL: compiledURL, configuration: configuration)
+    }
+
     // MARK: - Inference
 
     /// Makes a prediction with the model.
