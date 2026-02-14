@@ -78,6 +78,11 @@ public enum EdgeMLError: LocalizedError, Sendable {
     /// Keychain operation failed.
     case keychainError(status: OSStatus)
 
+    // MARK: - Local Model Errors
+
+    /// Local model file was not found at the specified path.
+    case localModelNotFound(path: String)
+
     // MARK: - General Errors
 
     /// An unexpected error occurred.
@@ -116,6 +121,8 @@ public enum EdgeMLError: LocalizedError, Sendable {
             return "Downloaded model checksum does not match. File may be corrupted."
         case .modelCompilationFailed(let reason):
             return "Failed to compile CoreML model: \(reason)"
+        case .localModelNotFound(let path):
+            return "Local model file not found at path: \(path)"
         case .unsupportedModelFormat(let format):
             return "Model format '\(format)' is not supported on iOS."
         case .cacheError(let reason):
@@ -164,6 +171,8 @@ public enum EdgeMLError: LocalizedError, Sendable {
             return "Free up storage space on the device."
         case .trainingNotSupported:
             return "Use a model that supports on-device training."
+        case .localModelNotFound:
+            return "Verify the model file exists at the specified path and is included in your app bundle."
         default:
             return nil
         }
