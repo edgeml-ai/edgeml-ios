@@ -1067,5 +1067,136 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNotNil(json["properties"])
         XCTAssertNotNil(json["timestamp"])
     }
+
+    // MARK: - New DTO Tests (SDK Parity)
+
+    func testRoundAssignmentDecoding() throws {
+        let json = """
+        {"id":"r1","org_id":"org1","model_id":"m1","version_id":"v1","state":"active",
+         "min_clients":2,"max_clients":10,"client_selection_strategy":"random",
+         "aggregation_type":"fedavg","timeout_minutes":30}
+        """.data(using: .utf8)!
+        let round = try JSONDecoder().decode(RoundAssignment.self, from: json)
+        XCTAssertEqual(round.id, "r1")
+        XCTAssertEqual(round.state, "active")
+        XCTAssertEqual(round.minClients, 2)
+        XCTAssertNil(round.differentialPrivacy)
+    }
+
+    func testHealthResponseDecoding() throws {
+        let json = """
+        {"status":"ok","version":"1.2.3","timestamp":"2026-01-01T00:00:00Z"}
+        """.data(using: .utf8)!
+        let resp = try JSONDecoder().decode(HealthResponse.self, from: json)
+        XCTAssertEqual(resp.status, "ok")
+        XCTAssertEqual(resp.version, "1.2.3")
+    }
+
+    func testModelResponseDecoding() throws {
+        let json = """
+        {"id":"m1","org_id":"org1","name":"TestModel","framework":"coreml",
+         "use_case":"classification","version_count":3,
+         "created_at":"2026-01-01","updated_at":"2026-01-02"}
+        """.data(using: .utf8)!
+        let model = try JSONDecoder().decode(ModelResponse.self, from: json)
+        XCTAssertEqual(model.name, "TestModel")
+        XCTAssertEqual(model.versionCount, 3)
+    }
+
+    func testDevicePolicyResponseDecoding() throws {
+        let json = """
+        {"battery_threshold":20,"network_policy":"wifi_only"}
+        """.data(using: .utf8)!
+        let policy = try JSONDecoder().decode(DevicePolicyResponse.self, from: json)
+        XCTAssertEqual(policy.batteryThreshold, 20)
+        XCTAssertEqual(policy.networkPolicy, "wifi_only")
+        XCTAssertNil(policy.samplingPolicy)
+    }
+
+    func testGradientUpdateRequestEncoding() throws {
+        let req = GradientUpdateRequest(
+            deviceId: "d1",
+            modelId: "m1",
+            version: "1.0",
+            roundId: "r1",
+            numSamples: 100,
+            trainingTimeMs: 5000,
+            metrics: GradientTrainingMetrics(loss: 0.5, accuracy: 0.9)
+        )
+        let data = try JSONEncoder().encode(req)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["device_id"] as? String, "d1")
+        XCTAssertEqual(json["num_samples"] as? Int, 100)
+    }
+
+    func testWeightUploadRequestFlatEncoding() throws {
+        let req = WeightUploadRequest(
+            modelId: "m1",
+            version: "1.0",
+            deviceId: "d1",
+            weightsData: Data([0x01, 0x02]),
+            sampleCount: 50,
+            metrics: ["loss": 0.1],
+            dpMetadata: .init(epsilonUsed: 1.0, mechanism: "gaussian")
+        )
+        let data = try JSONEncoder().encode(req)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["dp_epsilon_used"] as? Double, 1.0)
+        XCTAssertEqual(json["dp_mechanism"] as? String, "gaussian")
+        XCTAssertNil(json["dp_noise_scale"])
+    }
+
+    func testWeightUploadRequestNoDPEncoding() throws {
+        let req = WeightUploadRequest(
+            modelId: "m1",
+            version: "1.0",
+            deviceId: nil,
+            weightsData: Data([0x01]),
+            sampleCount: 10,
+            metrics: [:]
+        )
+        let data = try JSONEncoder().encode(req)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertNil(json["dp_epsilon_used"])
+        XCTAssertNil(json["dp_mechanism"])
+    }
+
+    func testHeartbeatRequestDeviceStateEncoding() throws {
+        var req = HeartbeatRequest(metadata: ["key": "val"])
+        req.batteryLevel = 85
+        req.isCharging = true
+        req.networkType = "wifi"
+        let data = try JSONEncoder().encode(req)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["battery_level"] as? Int, 85)
+        XCTAssertEqual(json["is_charging"] as? Bool, true)
+        XCTAssertEqual(json["network_type"] as? String, "wifi")
+    }
+
+    func testTrackingEventVarFields() throws {
+        var event = TrackingEvent(name: "train_start")
+        event.deviceId = "d1"
+        event.modelId = "m1"
+        event.metrics = ["loss": 0.5]
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["device_id"] as? String, "d1")
+        XCTAssertEqual(json["model_id"] as? String, "m1")
+    }
+
+    func testDownloadURLResponseOptionalFields() throws {
+        let json = """
+        {"url":"https://example.com/model.mlmodel","quantization":"int8",
+         "recommended_delegates":["neural_engine"],"input_shape":[1,28,28,1]}
+        """.data(using: .utf8)!
+        let resp = try JSONDecoder().decode(DownloadURLResponse.self, from: json)
+        XCTAssertEqual(resp.url, "https://example.com/model.mlmodel")
+        XCTAssertEqual(resp.quantization, "int8")
+        XCTAssertEqual(resp.recommendedDelegates, ["neural_engine"])
+        XCTAssertEqual(resp.inputShape, [1, 28, 28, 1])
+        XCTAssertNil(resp.hasTrainingSignature)
+    }
 }
 // swiftlint:enable type_body_length

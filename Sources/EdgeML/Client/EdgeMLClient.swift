@@ -637,10 +637,7 @@ public final class EdgeMLClient: @unchecked Sendable {
                     weightsData: update.weightsData,
                     sampleCount: update.sampleCount,
                     metrics: update.metrics,
-                    dpEpsilonUsed: update.dpEpsilonUsed,
-                    dpNoiseScale: update.dpNoiseScale,
-                    dpMechanism: update.dpMechanism,
-                    dpClippingNorm: update.dpClippingNorm
+                    dpMetadata: update.dpMetadata
                 )
                 weightUpdate = update
 

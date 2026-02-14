@@ -84,11 +84,9 @@ public actor EventQueue {
         do {
             // Enforce max queue size with FIFO eviction
             let files = try eventFiles()
-            if files.count >= maxQueueSize {
-                // Remove the oldest file
-                if let oldest = files.min(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                    try? FileManager.default.removeItem(at: oldest)
-                }
+            if files.count >= maxQueueSize,
+               let oldest = files.min(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                try? FileManager.default.removeItem(at: oldest)
             }
 
             let data = try jsonEncoder.encode(event)

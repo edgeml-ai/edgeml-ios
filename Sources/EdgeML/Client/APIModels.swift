@@ -138,21 +138,21 @@ public struct HeartbeatRequest: Codable, Sendable {
     /// Optional metadata to merge with existing device metadata.
     public let metadata: [String: String]?
     /// SDK version.
-    public let sdkVersion: String?
+    public var sdkVersion: String?
     /// OS version.
-    public let osVersion: String?
+    public var osVersion: String?
     /// App version.
-    public let appVersion: String?
+    public var appVersion: String?
     /// Battery level (0-100).
-    public let batteryLevel: Int?
+    public var batteryLevel: Int?
     /// Whether device is charging.
-    public let isCharging: Bool?
+    public var isCharging: Bool?
     /// Available storage in MB.
-    public let availableStorageMb: Int?
+    public var availableStorageMb: Int?
     /// Available memory in MB.
-    public let availableMemoryMb: Int?
+    public var availableMemoryMb: Int?
     /// Network type (e.g., "wifi", "cellular").
-    public let networkType: String?
+    public var networkType: String?
 
     enum CodingKeys: String, CodingKey {
         case metadata
@@ -166,26 +166,8 @@ public struct HeartbeatRequest: Codable, Sendable {
         case networkType = "network_type"
     }
 
-    public init(
-        metadata: [String: String]? = nil,
-        sdkVersion: String? = nil,
-        osVersion: String? = nil,
-        appVersion: String? = nil,
-        batteryLevel: Int? = nil,
-        isCharging: Bool? = nil,
-        availableStorageMb: Int? = nil,
-        availableMemoryMb: Int? = nil,
-        networkType: String? = nil
-    ) {
+    public init(metadata: [String: String]? = nil) {
         self.metadata = metadata
-        self.sdkVersion = sdkVersion
-        self.osVersion = osVersion
-        self.appVersion = appVersion
-        self.batteryLevel = batteryLevel
-        self.isCharging = isCharging
-        self.availableStorageMb = availableStorageMb
-        self.availableMemoryMb = availableMemoryMb
-        self.networkType = networkType
     }
 }
 
@@ -603,14 +585,27 @@ public struct WeightUpdate: Codable, Sendable {
     public let sampleCount: Int
     /// Training metrics.
     public let metrics: [String: Double]
-    /// Epsilon used for this update (if DP was applied).
-    public let dpEpsilonUsed: Double?
-    /// Noise scale (sigma) applied (if DP was applied).
-    public let dpNoiseScale: Double?
-    /// Noise mechanism used ("gaussian" or "laplace"), nil if no DP.
-    public let dpMechanism: String?
-    /// L2 clipping norm used (if DP was applied).
-    public let dpClippingNorm: Double?
+    /// Differential privacy metadata (nil if DP was not applied).
+    public let dpMetadata: DPMetadata?
+
+    /// Differential privacy metadata for a weight upload.
+    public struct DPMetadata: Codable, Sendable {
+        /// Epsilon used for this update.
+        public let epsilonUsed: Double?
+        /// Noise scale (sigma) applied.
+        public let noiseScale: Double?
+        /// Noise mechanism used ("gaussian" or "laplace").
+        public let mechanism: String?
+        /// L2 clipping norm used.
+        public let clippingNorm: Double?
+
+        public init(epsilonUsed: Double? = nil, noiseScale: Double? = nil, mechanism: String? = nil, clippingNorm: Double? = nil) {
+            self.epsilonUsed = epsilonUsed
+            self.noiseScale = noiseScale
+            self.mechanism = mechanism
+            self.clippingNorm = clippingNorm
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
@@ -632,10 +627,7 @@ public struct WeightUpdate: Codable, Sendable {
         weightsData: Data,
         sampleCount: Int,
         metrics: [String: Double],
-        dpEpsilonUsed: Double? = nil,
-        dpNoiseScale: Double? = nil,
-        dpMechanism: String? = nil,
-        dpClippingNorm: Double? = nil
+        dpMetadata: DPMetadata? = nil
     ) {
         self.modelId = modelId
         self.version = version
@@ -643,10 +635,40 @@ public struct WeightUpdate: Codable, Sendable {
         self.weightsData = weightsData
         self.sampleCount = sampleCount
         self.metrics = metrics
-        self.dpEpsilonUsed = dpEpsilonUsed
-        self.dpNoiseScale = dpNoiseScale
-        self.dpMechanism = dpMechanism
-        self.dpClippingNorm = dpClippingNorm
+        self.dpMetadata = dpMetadata
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(modelId, forKey: .modelId)
+        try container.encode(version, forKey: .version)
+        try container.encodeIfPresent(deviceId, forKey: .deviceId)
+        try container.encode(weightsData, forKey: .weightsData)
+        try container.encode(sampleCount, forKey: .sampleCount)
+        try container.encode(metrics, forKey: .metrics)
+        try container.encodeIfPresent(dpMetadata?.epsilonUsed, forKey: .dpEpsilonUsed)
+        try container.encodeIfPresent(dpMetadata?.noiseScale, forKey: .dpNoiseScale)
+        try container.encodeIfPresent(dpMetadata?.mechanism, forKey: .dpMechanism)
+        try container.encodeIfPresent(dpMetadata?.clippingNorm, forKey: .dpClippingNorm)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        modelId = try container.decode(String.self, forKey: .modelId)
+        version = try container.decode(String.self, forKey: .version)
+        deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId)
+        weightsData = try container.decode(Data.self, forKey: .weightsData)
+        sampleCount = try container.decode(Int.self, forKey: .sampleCount)
+        metrics = try container.decode([String: Double].self, forKey: .metrics)
+        let epsilonUsed = try container.decodeIfPresent(Double.self, forKey: .dpEpsilonUsed)
+        let noiseScale = try container.decodeIfPresent(Double.self, forKey: .dpNoiseScale)
+        let mechanism = try container.decodeIfPresent(String.self, forKey: .dpMechanism)
+        let clippingNorm = try container.decodeIfPresent(Double.self, forKey: .dpClippingNorm)
+        if epsilonUsed != nil || noiseScale != nil || mechanism != nil || clippingNorm != nil {
+            dpMetadata = DPMetadata(epsilonUsed: epsilonUsed, noiseScale: noiseScale, mechanism: mechanism, clippingNorm: clippingNorm)
+        } else {
+            dpMetadata = nil
+        }
     }
 }
 
@@ -661,17 +683,17 @@ public struct TrackingEvent: Codable, Sendable {
     /// Timestamp.
     public let timestamp: Date
     /// Device identifier.
-    public let deviceId: String?
+    public var deviceId: String?
     /// Model identifier.
-    public let modelId: String?
+    public var modelId: String?
     /// Model version.
-    public let version: String?
+    public var version: String?
     /// Event type classification.
-    public let eventType: String?
+    public var eventType: String?
     /// Numeric metrics.
-    public let metrics: [String: Double]?
+    public var metrics: [String: Double]?
     /// String metadata.
-    public let metadata: [String: String]?
+    public var metadata: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -688,23 +710,11 @@ public struct TrackingEvent: Codable, Sendable {
     public init(
         name: String,
         properties: [String: String] = [:],
-        timestamp: Date = Date(),
-        deviceId: String? = nil,
-        modelId: String? = nil,
-        version: String? = nil,
-        eventType: String? = nil,
-        metrics: [String: Double]? = nil,
-        metadata: [String: String]? = nil
+        timestamp: Date = Date()
     ) {
         self.name = name
         self.properties = properties
         self.timestamp = timestamp
-        self.deviceId = deviceId
-        self.modelId = modelId
-        self.version = version
-        self.eventType = eventType
-        self.metrics = metrics
-        self.metadata = metadata
     }
 }
 
