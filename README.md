@@ -61,6 +61,20 @@ pod 'EdgeML', '~> 1.0'
 
 ## Quick Start
 
+### Local Inference — No Server Required
+
+Run CoreML models locally with two lines. No server, no auth, no registration needed:
+
+```swift
+import EdgeML
+
+// Load and run a CoreML model — fully offline
+let model = try EdgeMLModel(compiledModelURL: Bundle.main.url(forResource: "classifier", withExtension: "mlmodelc")!)
+let result = try model.predict(input: features)
+```
+
+When you're ready to connect to the EdgeML platform, initialize with your API key and the SDK automatically starts reporting metrics.
+
 ### Basic Device Registration
 
 ```swift
