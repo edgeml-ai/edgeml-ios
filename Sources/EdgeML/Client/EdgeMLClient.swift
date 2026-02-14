@@ -763,6 +763,16 @@ public final class EdgeMLClient: @unchecked Sendable {
     }
     #endif
 
+    // MARK: - Federated Analytics
+
+    /// Creates a federated analytics client for the given federation.
+    ///
+    /// - Parameter federationId: The federation to run analytics against.
+    /// - Returns: A ``FederatedAnalyticsClient`` bound to this client's API connection.
+    public func analytics(federationId: String) -> FederatedAnalyticsClient {
+        return FederatedAnalyticsClient(apiClient: apiClient, federationId: federationId)
+    }
+
     // MARK: - Event Tracking
 
     /// Tracks an event for an experiment.

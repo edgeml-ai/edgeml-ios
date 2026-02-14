@@ -409,6 +409,49 @@ public actor APIClient {
         let _: EmptyResponse = try await performRequest(urlRequest)
     }
 
+    // MARK: - Generic JSON Helpers
+
+    /// Sends a POST request with a JSON body and decodes the response.
+    /// - Parameters:
+    ///   - path: Relative API path (e.g. "api/v1/federations/{id}/analytics/descriptive").
+    ///   - body: Encodable request body.
+    /// - Returns: Decoded response.
+    public func postJSON<Body: Encodable, T: Decodable>(path: String, body: Body) async throws -> T {
+        let url = serverURL.appendingPathComponent(path)
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        try configureHeaders(&urlRequest)
+        urlRequest.httpBody = try jsonEncoder.encode(body)
+
+        return try await performRequest(urlRequest)
+    }
+
+    /// Sends a GET request with optional query items and decodes the response.
+    /// - Parameters:
+    ///   - path: Relative API path.
+    ///   - queryItems: Optional query parameters.
+    /// - Returns: Decoded response.
+    public func getJSON<T: Decodable>(
+        path: String,
+        queryItems: [URLQueryItem]? = nil
+    ) async throws -> T {
+        var components = URLComponents(
+            url: serverURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false
+        )!
+        if let queryItems = queryItems, !queryItems.isEmpty {
+            components.queryItems = queryItems
+        }
+
+        var urlRequest = URLRequest(url: components.url!)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        return try await performRequest(urlRequest)
+    }
+
     // MARK: - Download
 
     /// Downloads data from a URL.
