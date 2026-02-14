@@ -237,11 +237,10 @@ public class DeviceMetadata {
         return info
     }
 
-    /// Collect runtime metadata (battery, network, thermal state)
+    /// Collect runtime metadata (battery, network)
     public func collectMetadata() -> [String: Any] {
         var metadata: [String: Any] = [
-            "network_type": networkType,
-            "thermal_state": ThermalMonitor.shared.currentState.rawValue
+            "network_type": networkType
         ]
 
         if let battery = batteryLevel {
@@ -280,9 +279,7 @@ public class DeviceMetadata {
     ///
     /// Call this periodically to send updated battery/network status.
     public func updateMetadata() -> [String: Any] {
-        var metadata = collectMetadata()
-        metadata["thermal_state"] = ThermalMonitor.shared.currentState.rawValue
-        return metadata
+        return collectMetadata()
     }
 }
 

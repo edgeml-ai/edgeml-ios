@@ -15,23 +15,12 @@ public struct PrivacyConfiguration {
     /// Whether to enable differential privacy (noise injection).
     public let enableDifferentialPrivacy: Bool
 
-    /// Privacy budget (epsilon) per round for differential privacy.
+    /// Privacy budget (epsilon) for differential privacy.
     /// Smaller values = more private (more noise).
     public let dpEpsilon: Double
 
     /// Gradient clipping norm for differential privacy.
     public let dpClippingNorm: Double
-
-    /// Delta parameter for (epsilon, delta)-differential privacy.
-    /// Probability of privacy guarantee failure. Typically 1e-5.
-    public let dpDelta: Double
-
-    /// Noise mechanism to use for differential privacy.
-    public let noiseMechanism: NoiseMechanism
-
-    /// Maximum cumulative epsilon across all rounds.
-    /// Training stops contributing when this budget is exhausted.
-    public let maxLocalEpsilon: Double
 
     /// Creates a privacy configuration.
     /// - Parameters:
@@ -39,21 +28,15 @@ public struct PrivacyConfiguration {
     ///   - minUploadDelaySeconds: Minimum delay in seconds (default: 0)
     ///   - maxUploadDelaySeconds: Maximum delay in seconds (default: 300 = 5 minutes)
     ///   - enableDifferentialPrivacy: Enable DP noise injection (default: false)
-    ///   - dpEpsilon: Privacy budget per round (default: 1.0)
+    ///   - dpEpsilon: Privacy budget (default: 1.0)
     ///   - dpClippingNorm: Gradient clipping threshold (default: 1.0)
-    ///   - dpDelta: Delta parameter for DP (default: 1e-5)
-    ///   - noiseMechanism: Noise mechanism (default: .gaussian)
-    ///   - maxLocalEpsilon: Maximum cumulative epsilon (default: 10.0)
     public init(
         enableStaggeredUpdates: Bool = true,
         minUploadDelaySeconds: Double = 0,
         maxUploadDelaySeconds: Double = 300,
         enableDifferentialPrivacy: Bool = false,
         dpEpsilon: Double = 1.0,
-        dpClippingNorm: Double = 1.0,
-        dpDelta: Double = 1e-5,
-        noiseMechanism: NoiseMechanism = .gaussian,
-        maxLocalEpsilon: Double = 10.0
+        dpClippingNorm: Double = 1.0
     ) {
         self.enableStaggeredUpdates = enableStaggeredUpdates
         self.minUploadDelaySeconds = minUploadDelaySeconds
@@ -61,9 +44,6 @@ public struct PrivacyConfiguration {
         self.enableDifferentialPrivacy = enableDifferentialPrivacy
         self.dpEpsilon = dpEpsilon
         self.dpClippingNorm = dpClippingNorm
-        self.dpDelta = dpDelta
-        self.noiseMechanism = noiseMechanism
-        self.maxLocalEpsilon = maxLocalEpsilon
     }
 
     /// Default privacy configuration (staggered updates enabled, DP disabled).
@@ -76,10 +56,7 @@ public struct PrivacyConfiguration {
         maxUploadDelaySeconds: 600,
         enableDifferentialPrivacy: true,
         dpEpsilon: 0.5,
-        dpClippingNorm: 1.0,
-        dpDelta: 1e-5,
-        noiseMechanism: .gaussian,
-        maxLocalEpsilon: 5.0
+        dpClippingNorm: 1.0
     )
 
     /// No privacy enhancements (for testing/debugging).

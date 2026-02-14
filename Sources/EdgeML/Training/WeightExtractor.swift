@@ -10,19 +10,8 @@ actor WeightExtractor {
 
     private let logger: Logger
 
-    /// Optional differential privacy engine for noise injection.
-    private var dpEngine: DifferentialPrivacyEngine?
-
-    /// DP metadata from the last `extractWeightDelta` call, if DP was applied.
-    private(set) var dpResult: DPResult?
-
     init() {
         self.logger = Logger(subsystem: "ai.edgeml.sdk", category: "WeightExtractor")
-    }
-
-    /// Sets the differential privacy engine to use during weight extraction.
-    func setDPEngine(_ engine: DifferentialPrivacyEngine?) {
-        self.dpEngine = engine
     }
 
     // MARK: - Weight Extraction
@@ -57,17 +46,7 @@ actor WeightExtractor {
         let updatedWeights = try await extractWeights(from: tempURL)
 
         // Compute delta (updated - original)
-        var delta = computeDelta(original: originalWeights, updated: updatedWeights)
-
-        // Apply differential privacy if engine is configured
-        self.dpResult = nil
-        if let dpEngine = dpEngine {
-            let floatDeltas = multiArrayDictToFloatDict(delta)
-            let (noisyDeltas, metadata) = try await dpEngine.applyDP(to: floatDeltas)
-            delta = floatDictToMultiArrayDict(noisyDeltas, referenceShapes: delta)
-            self.dpResult = metadata
-            logger.info("Differential privacy applied: epsilon=\(metadata.epsilonUsed), noise_scale=\(metadata.noiseScale)")
-        }
+        let delta = computeDelta(original: originalWeights, updated: updatedWeights)
 
         // Serialize to PyTorch format
         let serialized = try serializeToPyTorch(delta: delta)
@@ -331,39 +310,5 @@ actor WeightExtractor {
         }
 
         return data
-    }
-
-    // MARK: - DP Conversion Helpers
-
-    /// Converts MLMultiArray dictionary to [String: [Float]] for DP processing.
-    private func multiArrayDictToFloatDict(_ dict: [String: MLMultiArray]) -> [String: [Float]] {
-        var result: [String: [Float]] = [:]
-        for (key, array) in dict {
-            var floats = [Float](repeating: 0, count: array.count)
-            for i in 0..<array.count {
-                floats[i] = array[i].floatValue
-            }
-            result[key] = floats
-        }
-        return result
-    }
-
-    /// Converts [String: [Float]] back to MLMultiArray dictionary, using reference shapes.
-    private func floatDictToMultiArrayDict(
-        _ dict: [String: [Float]],
-        referenceShapes: [String: MLMultiArray]
-    ) -> [String: MLMultiArray] {
-        var result: [String: MLMultiArray] = [:]
-        for (key, values) in dict {
-            let shape = referenceShapes[key]?.shape ?? [NSNumber(value: values.count)]
-            guard let array = try? MLMultiArray(shape: shape, dataType: .float32) else {
-                continue
-            }
-            for i in 0..<values.count {
-                array[i] = NSNumber(value: values[i])
-            }
-            result[key] = array
-        }
-        return result
     }
 }

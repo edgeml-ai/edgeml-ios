@@ -51,17 +51,13 @@ public struct EdgeMLConfiguration: Sendable {
         public let requireChargingForTraining: Bool
         /// Minimum battery level required for background training (0.0 - 1.0).
         public let minimumBatteryLevel: Float
-        /// Thermal management policy for training.
-        public let thermalPolicy: ThermalPolicy
 
         public init(
             requireChargingForTraining: Bool = true,
-            minimumBatteryLevel: Float = 0.2,
-            thermalPolicy: ThermalPolicy = .adaptive
+            minimumBatteryLevel: Float = 0.2
         ) {
             self.requireChargingForTraining = requireChargingForTraining
             self.minimumBatteryLevel = minimumBatteryLevel
-            self.thermalPolicy = thermalPolicy
         }
     }
 
