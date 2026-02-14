@@ -1122,7 +1122,7 @@ final class APIModelsTests: XCTestCase {
             gradientsPath: nil,
             numSamples: 100,
             trainingTimeMs: 5000,
-            metrics: GradientTrainingMetrics(loss: 0.5, accuracy: 0.9, numBatches: 10)
+            metrics: GradientTrainingMetrics(loss: 0.5, accuracy: 0.9, numBatches: 10, learningRate: nil, customMetrics: nil)
         )
         let data = try JSONEncoder().encode(req)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
