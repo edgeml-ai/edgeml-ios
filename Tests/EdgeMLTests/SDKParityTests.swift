@@ -63,18 +63,22 @@ final class SDKParityTests: XCTestCase {
         let queue = EventQueue(queueDir: tempDir)
         await queue.addEvent(QueuedEvent(id: "e1", type: "test"))
         await queue.addEvent(QueuedEvent(id: "e2", type: "test"))
-        XCTAssertEqual(await queue.getQueueSize(), 2)
+        let sizeBeforeClear = await queue.getQueueSize()
+        XCTAssertEqual(sizeBeforeClear, 2)
 
         await queue.clear()
-        XCTAssertEqual(await queue.getQueueSize(), 0)
+        let sizeAfterClear = await queue.getQueueSize()
+        XCTAssertEqual(sizeAfterClear, 0)
     }
 
     func testEventQueueGetQueueSize() async {
         let queue = EventQueue(queueDir: tempDir)
-        XCTAssertEqual(await queue.getQueueSize(), 0)
+        let initialSize = await queue.getQueueSize()
+        XCTAssertEqual(initialSize, 0)
 
         await queue.addEvent(QueuedEvent(id: "e1", type: "test"))
-        XCTAssertEqual(await queue.getQueueSize(), 1)
+        let newSize = await queue.getQueueSize()
+        XCTAssertEqual(newSize, 1)
     }
 
     func testEventQueueFIFOEviction() async {
@@ -83,7 +87,8 @@ final class SDKParityTests: XCTestCase {
         // Add events up to 1000 (the max) would be slow, so test the logic indirectly
         // by verifying addEvent returns true even when the queue is full
         let event = QueuedEvent(id: "overflow", type: "test")
-        XCTAssertTrue(await queue.addEvent(event))
+        let added = await queue.addEvent(event)
+        XCTAssertTrue(added)
     }
 
     func testEventQueueSortsByTimestamp() async {
