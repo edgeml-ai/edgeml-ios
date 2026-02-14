@@ -8,8 +8,8 @@ public final class AudioEngine: StreamingInferenceEngine, @unchecked Sendable {
     /// Path to the CoreML audio model package.
     private let modelPath: URL
 
-    /// Duration of audio to generate in seconds.
-    public var durationSeconds: Double
+    /// Number of audio frames to generate.
+    public var totalFrames: Int
 
     /// Sample rate in Hz.
     public var sampleRate: Int
@@ -17,19 +17,18 @@ public final class AudioEngine: StreamingInferenceEngine, @unchecked Sendable {
     /// Creates an audio generation engine.
     /// - Parameters:
     ///   - modelPath: File URL pointing to the CoreML model package.
-    ///   - durationSeconds: Target duration (default: 5.0).
+    ///   - totalFrames: Number of audio frames to generate (default: 80).
     ///   - sampleRate: Audio sample rate (default: 16000).
-    public init(modelPath: URL, durationSeconds: Double = 5.0, sampleRate: Int = 16000) {
+    public init(modelPath: URL, totalFrames: Int = 80, sampleRate: Int = 16000) {
         self.modelPath = modelPath
-        self.durationSeconds = durationSeconds
+        self.totalFrames = totalFrames
         self.sampleRate = sampleRate
     }
 
     // MARK: - StreamingInferenceEngine
 
     public func generate(input _: Any, modality _: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
-        let sampleRate = self.sampleRate
-        let totalFrames = Int(durationSeconds * Double(sampleRate) / 1024)
+        let totalFrames = self.totalFrames
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -37,8 +36,8 @@ public final class AudioEngine: StreamingInferenceEngine, @unchecked Sendable {
                     for frame in 0..<totalFrames {
                         if Task.isCancelled { break }
 
-                        // Placeholder audio frame (1024 samples × 2 bytes each)
-                        let frameData = Data(repeating: 0, count: 1024 * 2)
+                        // Placeholder PCM frame (1024 samples x 2 bytes each)
+                        let frameData = Data(repeating: 0, count: 2048)
                         let chunk = InferenceChunk(
                             index: frame,
                             data: frameData,
@@ -48,7 +47,7 @@ public final class AudioEngine: StreamingInferenceEngine, @unchecked Sendable {
                         )
                         continuation.yield(chunk)
 
-                        try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+                        try await Task.sleep(nanoseconds: 25_000_000) // 25ms
                     }
                     continuation.finish()
                 } catch {

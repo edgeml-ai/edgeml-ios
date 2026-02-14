@@ -491,7 +491,380 @@ public final class EdgeMLClient: @unchecked Sendable {
         }
     }
 
-    // MARK: - Training
+    // MARK: - Unified Training
+
+    /// Train the model on local data with a single, unified API.
+    ///
+    /// This is the **recommended** way to do all training. It replaces the
+    /// previous split between ``participateInRound`` and ``trainLocal``.
+    ///
+    /// ## Upload behavior
+    ///
+    /// The `uploadPolicy` parameter controls what happens after training:
+    /// - ``UploadPolicy/auto``: Extracts weights and uploads automatically.
+    ///   Uses SecAgg if enabled and a `roundId` is provided.
+    /// - ``UploadPolicy/manual``: Extracts weights but does NOT upload.
+    ///   Returns them in ``TrainingOutcome/weightUpdate`` for you to handle.
+    /// - ``UploadPolicy/disabled``: No weight extraction or upload. Pure local training.
+    ///
+    /// ## Degraded mode
+    ///
+    /// If the model lacks CoreML updatable parameters, behavior depends on
+    /// ``EdgeMLConfiguration/allowDegradedTraining``:
+    /// - **false (default)**: Throws ``MissingTrainingSignatureError``.
+    /// - **true**: Runs forward-pass training (no weight updates) and sets
+    ///   ``TrainingOutcome/degraded`` to `true`.
+    ///
+    /// - Parameters:
+    ///   - model: The model to train.
+    ///   - dataProvider: Closure that provides training data.
+    ///   - trainingConfig: Training configuration.
+    ///   - uploadPolicy: Controls weight extraction and upload.
+    ///   - roundId: Optional federated learning round ID.
+    /// - Returns: ``TrainingOutcome`` with training metrics, optional weights, and upload status.
+    /// - Throws: ``MissingTrainingSignatureError`` if model lacks training support and degraded mode is disabled.
+    public func train(
+        model: EdgeMLModel,
+        dataProvider: @escaping () -> MLBatchProvider,
+        trainingConfig: TrainingConfig = .standard,
+        uploadPolicy: UploadPolicy = .auto,
+        roundId: String? = nil
+    ) async throws -> TrainingOutcome {
+        guard let deviceId = self.deviceId else {
+            throw EdgeMLError.deviceNotRegistered
+        }
+
+        // Check for training signature support
+        let isDegraded = !model.supportsTraining
+        if isDegraded && !configuration.allowDegradedTraining {
+            throw MissingTrainingSignatureError(
+                availableSignatures: Array(model.inputDescriptions.keys)
+            )
+        }
+
+        if isDegraded, configuration.enableLogging {
+            logger.error("MODEL TRAINING DEGRADED: Model lacks updatable parameters. Weights will NOT be updated on-device.")
+        }
+
+        if configuration.enableLogging {
+            logger.info("Starting training: policy=\(uploadPolicy.rawValue), round=\(roundId ?? "none"), degraded=\(isDegraded)")
+        }
+
+        // Train locally
+        let trainer = FederatedTrainer(configuration: configuration)
+        let trainingResult: TrainingResult
+
+        if isDegraded {
+            // Degraded mode: run inference on training data to collect metrics
+            let data = dataProvider()
+            let startTime = Date()
+            // Run a single prediction to measure forward-pass metrics
+            if data.count > 0 {
+                let firstFeature = data.features(at: 0)
+                _ = try? model.predict(input: firstFeature)
+            }
+            let trainingTime = Date().timeIntervalSince(startTime)
+            trainingResult = TrainingResult(
+                sampleCount: data.count,
+                loss: nil,
+                accuracy: nil,
+                trainingTime: trainingTime,
+                metrics: ["training_method": 0.0, "degraded": 1.0]
+            )
+        } else {
+            trainingResult = try await trainer.train(
+                model: model,
+                dataProvider: dataProvider,
+                config: trainingConfig
+            )
+        }
+
+        // Handle weight extraction and upload based on policy
+        var weightUpdate: WeightUpdate? = nil
+        var uploaded = false
+        var usedSecAgg = false
+
+        switch uploadPolicy {
+        case .auto:
+            if !isDegraded {
+                weightUpdate = try await trainer.extractWeightUpdate(
+                    model: model,
+                    trainingResult: trainingResult
+                )
+                var update = weightUpdate!
+                update = WeightUpdate(
+                    modelId: update.modelId,
+                    version: update.version,
+                    deviceId: deviceId,
+                    weightsData: update.weightsData,
+                    sampleCount: update.sampleCount,
+                    metrics: update.metrics
+                )
+                weightUpdate = update
+
+                // Use SecAgg if available and round-based
+                if let roundId = roundId, secAggClient != nil {
+                    usedSecAgg = true
+                    try await uploadWithSecAgg(
+                        weightUpdate: update,
+                        roundId: roundId,
+                        deviceId: deviceId
+                    )
+                    uploaded = true
+                } else {
+                    try await apiClient.uploadWeights(update)
+                    uploaded = true
+                }
+            }
+
+        case .manual:
+            if !isDegraded {
+                weightUpdate = try await trainer.extractWeightUpdate(
+                    model: model,
+                    trainingResult: trainingResult
+                )
+            }
+
+        case .disabled:
+            break
+        }
+
+        let outcome = TrainingOutcome(
+            trainingResult: trainingResult,
+            weightUpdate: weightUpdate,
+            uploaded: uploaded,
+            secureAggregation: usedSecAgg,
+            uploadPolicy: uploadPolicy,
+            degraded: isDegraded
+        )
+
+        if configuration.enableLogging {
+            logger.info("Training complete: \(trainingResult.sampleCount) samples, policy=\(uploadPolicy.rawValue), uploaded=\(uploaded), degraded=\(isDegraded)")
+        }
+
+        return outcome
+    }
+
+    /// Uploads weight updates using secure aggregation.
+    private func uploadWithSecAgg(
+        weightUpdate: WeightUpdate,
+        roundId: String,
+        deviceId: String
+    ) async throws {
+        if secAggClient == nil {
+            secAggClient = SecureAggregationClient()
+        }
+        let secAgg = secAggClient!
+
+        let session = try await apiClient.joinSecAggSession(deviceId: deviceId, roundId: roundId)
+
+        let secAggConfig = SecAggConfiguration(
+            threshold: session.threshold,
+            totalClients: session.totalClients,
+            privacyBudget: session.privacyBudget,
+            keyLength: session.keyLength
+        )
+
+        await secAgg.beginSession(
+            sessionId: session.sessionId,
+            clientIndex: session.clientIndex,
+            configuration: secAggConfig
+        )
+
+        let sharesData = try await secAgg.generateKeyShares()
+        let shareKeysRequest = SecAggShareKeysRequest(
+            sessionId: session.sessionId,
+            deviceId: deviceId,
+            sharesData: sharesData.base64EncodedString()
+        )
+        try await apiClient.submitSecAggShares(shareKeysRequest)
+
+        let maskedWeights = try await secAgg.maskModelUpdate(weightUpdate.weightsData)
+        let maskedInputRequest = SecAggMaskedInputRequest(
+            sessionId: session.sessionId,
+            deviceId: deviceId,
+            maskedWeightsData: maskedWeights.base64EncodedString(),
+            sampleCount: weightUpdate.sampleCount,
+            metrics: weightUpdate.metrics
+        )
+        try await apiClient.submitSecAggMaskedInput(maskedInputRequest)
+
+        let unmaskInfo = try await apiClient.getSecAggUnmaskInfo(
+            sessionId: session.sessionId,
+            deviceId: deviceId
+        )
+
+        if unmaskInfo.unmaskingRequired {
+            let unmaskData = try await secAgg.provideUnmaskingShares(
+                droppedClientIndices: unmaskInfo.droppedClientIndices
+            )
+            let unmaskRequest = SecAggUnmaskRequest(
+                sessionId: session.sessionId,
+                deviceId: deviceId,
+                unmaskData: unmaskData.base64EncodedString()
+            )
+            try await apiClient.submitSecAggUnmask(unmaskRequest)
+        }
+
+        await secAgg.reset()
+    }
+
+    // MARK: - Model Contract & Info
+
+    /// Returns the model's input/output contract for validation.
+    ///
+    /// Use this at setup time to validate that your data pipeline produces
+    /// the correct shapes and types before calling inference or training.
+    ///
+    /// - Parameter model: The model to inspect.
+    /// - Returns: A ``ModelContract`` describing the model, or nil if tensor info is unavailable.
+    public func getModelContract(for model: EdgeMLModel) -> ModelContract? {
+        guard let tensorInfo = getTensorInfo(for: model) else {
+            return nil
+        }
+        return ModelContract(
+            modelId: model.id,
+            version: model.version,
+            inputShape: tensorInfo.inputShape,
+            outputShape: tensorInfo.outputShape,
+            inputType: tensorInfo.inputType,
+            outputType: tensorInfo.outputType,
+            hasTrainingSignature: model.supportsTraining,
+            signatureKeys: model.supportsTraining ? ["train", "infer"] : ["infer"]
+        )
+    }
+
+    /// Returns summary information about a loaded model.
+    ///
+    /// - Parameter model: The model to inspect.
+    /// - Returns: A ``ModelInfo`` describing the model.
+    public func getModelInfo(for model: EdgeMLModel) -> ModelInfo {
+        let tensorInfo = getTensorInfo(for: model)
+        return ModelInfo(
+            modelId: model.id,
+            version: model.version,
+            format: model.metadata.format,
+            sizeBytes: Int64(model.metadata.fileSize),
+            inputShape: tensorInfo?.inputShape ?? [],
+            outputShape: tensorInfo?.outputShape ?? [],
+            usingNeuralEngine: hasNeuralEngine()
+        )
+    }
+
+    /// Returns tensor shape/type information for a loaded model.
+    ///
+    /// - Parameter model: The model to inspect.
+    /// - Returns: A ``TensorInfo`` with input/output shapes and types, or nil if unavailable.
+    public func getTensorInfo(for model: EdgeMLModel) -> TensorInfo? {
+        let inputDescs = model.mlModel.modelDescription.inputDescriptionsByName
+        let outputDescs = model.mlModel.modelDescription.outputDescriptionsByName
+
+        guard let firstInput = inputDescs.values.first,
+              let firstOutput = outputDescs.values.first else {
+            return nil
+        }
+
+        let inputShape = extractShape(from: firstInput)
+        let outputShape = extractShape(from: firstOutput)
+        let inputType = describeFeatureType(firstInput.type)
+        let outputType = describeFeatureType(firstOutput.type)
+
+        return TensorInfo(
+            inputShape: inputShape,
+            outputShape: outputShape,
+            inputType: inputType,
+            outputType: outputType
+        )
+    }
+
+    // MARK: - Warmup
+
+    /// Runs warmup inference to absorb cold-start costs before real inference.
+    ///
+    /// Performs a cold inference pass followed by a warm pass, then compares
+    /// Neural Engine vs CPU to determine the best compute path.
+    ///
+    /// - Parameter model: The model to warm up.
+    /// - Returns: A ``WarmupResult`` with timing information, or nil if warmup fails.
+    public func warmup(model: EdgeMLModel) async -> WarmupResult? {
+        guard let firstInput = model.mlModel.modelDescription.inputDescriptionsByName.values.first else {
+            return nil
+        }
+
+        // Create a dummy input matching the model's expected shape
+        guard let dummyInput = createDummyInput(for: model) else {
+            return nil
+        }
+
+        // Cold inference
+        let coldStart = Date()
+        _ = try? model.predict(input: dummyInput)
+        let coldInferenceMs = Date().timeIntervalSince(coldStart) * 1000
+
+        // Warm inference
+        let warmStart = Date()
+        _ = try? model.predict(input: dummyInput)
+        let warmInferenceMs = Date().timeIntervalSince(warmStart) * 1000
+
+        // CPU-only inference for comparison (use CPU-only compute units)
+        var cpuInferenceMs: Double? = nil
+        let cpuConfig = MLModelConfiguration()
+        cpuConfig.computeUnits = .cpuOnly
+        if let cpuModel = try? MLModel(contentsOf: model.compiledModelURL, configuration: cpuConfig) {
+            let cpuStart = Date()
+            _ = try? cpuModel.prediction(from: dummyInput)
+            cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
+        }
+
+        let usingNE = hasNeuralEngine()
+        var activeDelegate = usingNE ? "neural_engine" : "cpu"
+        var disabledDelegates: [String] = []
+
+        // If CPU is faster than Neural Engine, disable NE
+        if let cpuMs = cpuInferenceMs, cpuMs < warmInferenceMs, usingNE {
+            activeDelegate = "cpu"
+            disabledDelegates.append("neural_engine")
+        }
+
+        let result = WarmupResult(
+            coldInferenceMs: coldInferenceMs,
+            warmInferenceMs: warmInferenceMs,
+            cpuInferenceMs: cpuInferenceMs,
+            usingNeuralEngine: activeDelegate == "neural_engine",
+            activeDelegate: activeDelegate,
+            disabledDelegates: disabledDelegates
+        )
+
+        // Report warmup event
+        if let deviceId = self.deviceId {
+            Task {
+                try? await apiClient.trackEvent(
+                    experimentId: model.id,
+                    event: TrackingEvent(
+                        name: "MODEL_WARMUP_COMPLETED",
+                        properties: [
+                            "cold_inference_ms": String(format: "%.2f", coldInferenceMs),
+                            "warm_inference_ms": String(format: "%.2f", warmInferenceMs),
+                            "using_neural_engine": String(result.usingNeuralEngine),
+                            "active_delegate": activeDelegate,
+                            "delegate_disabled": String(result.delegateDisabled),
+                            "disabled_delegates": disabledDelegates.joined(separator: ",")
+                        ]
+                    )
+                )
+            }
+        }
+
+        if configuration.enableLogging {
+            let coldStr = String(format: "%.1f", coldInferenceMs)
+            let warmStr = String(format: "%.1f", warmInferenceMs)
+            logger.info("Warmup complete: cold=\(coldStr)ms, warm=\(warmStr)ms, delegate=\(activeDelegate)")
+        }
+
+        return result
+    }
+
+    // MARK: - Legacy Training
 
     /// Participates in a federated training round.
     ///
@@ -888,6 +1261,62 @@ public final class EdgeMLClient: @unchecked Sendable {
         #else
         return false
         #endif
+    }
+
+    /// Extracts the shape from a CoreML feature description.
+    private func extractShape(from description: MLFeatureDescription) -> [Int] {
+        if let constraint = description.multiArrayConstraint {
+            return constraint.shape.map { $0.intValue }
+        }
+        if let imageConstraint = description.imageConstraint {
+            return [1, Int(imageConstraint.pixelsHigh), Int(imageConstraint.pixelsWide), 3]
+        }
+        return []
+    }
+
+    /// Returns a string description of a CoreML feature type.
+    private func describeFeatureType(_ type: MLFeatureType) -> String {
+        switch type {
+        case .invalid:
+            return "Invalid"
+        case .int64:
+            return "Int64"
+        case .double:
+            return "Double"
+        case .string:
+            return "String"
+        case .multiArray:
+            return "MultiArray"
+        case .image:
+            return "Image"
+        case .dictionary:
+            return "Dictionary"
+        case .sequence:
+            return "Sequence"
+        case .state:
+            return "State"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    /// Creates a dummy MLFeatureProvider matching the model's input description.
+    private func createDummyInput(for model: EdgeMLModel) -> MLFeatureProvider? {
+        let inputDescs = model.mlModel.modelDescription.inputDescriptionsByName
+        var features: [String: MLFeatureValue] = [:]
+
+        for (name, desc) in inputDescs {
+            if let constraint = desc.multiArrayConstraint {
+                let shape = constraint.shape
+                guard let array = try? MLMultiArray(shape: shape, dataType: .float32) else {
+                    return nil
+                }
+                features[name] = MLFeatureValue(multiArray: array)
+            }
+        }
+
+        guard !features.isEmpty else { return nil }
+        return try? MLDictionaryFeatureProvider(dictionary: features)
     }
 }
 // swiftlint:enable type_body_length

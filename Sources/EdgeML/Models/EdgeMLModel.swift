@@ -55,6 +55,9 @@ public final class EdgeMLModel: @unchecked Sendable {
         return descriptions
     }
 
+    /// Optional MNN runtime configuration for the model.
+    public var mnnConfig: [String: Any]? = nil
+
     private let logger: Logger
 
     // MARK: - Initialization

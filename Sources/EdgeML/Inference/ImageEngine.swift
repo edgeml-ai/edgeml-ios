@@ -37,8 +37,8 @@ public final class ImageEngine: StreamingInferenceEngine, @unchecked Sendable {
                     for step in 0..<steps {
                         if Task.isCancelled { break }
 
-                        // Each step produces a partial image (placeholder bytes here).
-                        let stepData = Data(repeating: UInt8(step), count: 64)
+                        // Each step produces a partial image (placeholder pixel data).
+                        let stepData = Data(repeating: UInt8(step % 256), count: 1024)
                         let chunk = InferenceChunk(
                             index: step,
                             data: stepData,

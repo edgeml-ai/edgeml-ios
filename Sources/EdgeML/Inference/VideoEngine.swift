@@ -35,7 +35,6 @@ public final class VideoEngine: StreamingInferenceEngine, @unchecked Sendable {
 
     public func generate(input _: Any, modality _: Modality) -> AsyncThrowingStream<InferenceChunk, Error> {
         let frameCount = self.frameCount
-        let bytesPerFrame = width * height * 4 // RGBA
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -43,8 +42,8 @@ public final class VideoEngine: StreamingInferenceEngine, @unchecked Sendable {
                     for frame in 0..<frameCount {
                         if Task.isCancelled { break }
 
-                        // Placeholder frame data
-                        let frameData = Data(repeating: UInt8(frame % 256), count: min(bytesPerFrame, 1024))
+                        // Placeholder frame data (zeroed buffer)
+                        let frameData = Data(repeating: 0, count: 1024)
                         let chunk = InferenceChunk(
                             index: frame,
                             data: frameData,

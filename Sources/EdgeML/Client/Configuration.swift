@@ -84,6 +84,14 @@ public struct EdgeMLConfiguration: Sendable {
     /// Privacy configuration for upload behavior and differential privacy.
     public let privacyConfiguration: PrivacyConfiguration
 
+    /// Whether to allow training when the model lacks an updatable/training signature.
+    ///
+    /// When `false` (default), calling ``EdgeMLClient/train`` on a non-updatable model
+    /// throws ``MissingTrainingSignatureError``.
+    /// When `true`, training proceeds in degraded mode (forward-pass only, no gradient updates)
+    /// and ``TrainingOutcome/degraded`` is set to `true`.
+    public let allowDegradedTraining: Bool
+
     /// SHA-256 hashes of pinned server public keys (base64-encoded).
     /// When non-empty, the SDK validates the server certificate against these pins.
     /// Leave empty to use system default certificate validation.
@@ -146,6 +154,7 @@ public struct EdgeMLConfiguration: Sendable {
         updateCheckInterval: TimeInterval = 3600, // 1 hour
         training: TrainingPolicy = TrainingPolicy(),
         privacyConfiguration: PrivacyConfiguration = .standard,
+        allowDegradedTraining: Bool = false,
         pinnedCertificateHashes: [String] = []
     ) {
         self.network = network
@@ -155,6 +164,7 @@ public struct EdgeMLConfiguration: Sendable {
         self.updateCheckInterval = updateCheckInterval
         self.training = training
         self.privacyConfiguration = privacyConfiguration
+        self.allowDegradedTraining = allowDegradedTraining
         self.pinnedCertificateHashes = pinnedCertificateHashes
     }
 
@@ -174,7 +184,8 @@ public struct EdgeMLConfiguration: Sendable {
         requireWiFiForDownload: Bool = false,
         requireChargingForTraining: Bool = true,
         minimumBatteryLevel: Float = 0.2,
-        privacyConfiguration: PrivacyConfiguration = .standard
+        privacyConfiguration: PrivacyConfiguration = .standard,
+        allowDegradedTraining: Bool = false
     ) {
         self.init(
             network: NetworkPolicy(
@@ -195,6 +206,7 @@ public struct EdgeMLConfiguration: Sendable {
                 minimumBatteryLevel: minimumBatteryLevel
             ),
             privacyConfiguration: privacyConfiguration,
+            allowDegradedTraining: allowDegradedTraining,
             pinnedCertificateHashes: []
         )
     }

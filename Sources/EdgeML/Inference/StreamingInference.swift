@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Modality
 
 /// The modality of a generative model's output.
-public enum Modality: String, Codable, Sendable, CaseIterable {
+public enum Modality: String, Codable, Hashable, Sendable, CaseIterable {
     case text
     case image
     case audio

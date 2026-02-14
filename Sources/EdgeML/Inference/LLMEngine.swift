@@ -96,7 +96,7 @@ public final class LLMEngine: StreamingInferenceEngine, @unchecked Sendable {
         for word in response.split(separator: " ").prefix(maxTokens) {
             tokens.append(String(word) + " ")
             // Simulate per-token latency
-            try await Task.sleep(nanoseconds: 5_000_000) // 5ms
+            try await Task.sleep(nanoseconds: 10_000_000) // 10ms
         }
         return tokens
     }

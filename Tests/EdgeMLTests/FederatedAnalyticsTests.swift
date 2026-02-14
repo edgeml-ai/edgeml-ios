@@ -18,13 +18,12 @@ final class FederatedAnalyticsTests: XCTestCase {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [SharedMockURLProtocol.self]
 
-        let config = TestConfiguration.fast()
+        let config = TestConfiguration.fast(maxRetryAttempts: 1)
         apiClient = APIClient(
             serverURL: Self.testServerURL,
             configuration: config,
             sessionConfiguration: sessionConfig
         )
-        Task { await apiClient.setDeviceToken("test-token") }
 
         analyticsClient = FederatedAnalyticsClient(
             apiClient: apiClient,
@@ -37,9 +36,15 @@ final class FederatedAnalyticsTests: XCTestCase {
         super.tearDown()
     }
 
+    /// Set up the device token before making API requests.
+    private func setUpToken() async {
+        await apiClient.setDeviceToken("test-token")
+    }
+
     // MARK: - Descriptive
 
     func testDescriptiveSendsCorrectRequest() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "variable": "accuracy",
@@ -78,6 +83,7 @@ final class FederatedAnalyticsTests: XCTestCase {
     }
 
     func testDescriptiveWithGroupIds() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "variable": "loss",
@@ -104,6 +110,7 @@ final class FederatedAnalyticsTests: XCTestCase {
     // MARK: - T-Test
 
     func testTTestSendsCorrectRequest() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "variable": "accuracy",
@@ -148,6 +155,7 @@ final class FederatedAnalyticsTests: XCTestCase {
     // MARK: - Chi-Square
 
     func testChiSquareSendsCorrectRequest() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "variable_1": "platform",
@@ -186,6 +194,7 @@ final class FederatedAnalyticsTests: XCTestCase {
     // MARK: - ANOVA
 
     func testAnovaSendsCorrectRequest() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "variable": "latency",
@@ -236,6 +245,7 @@ final class FederatedAnalyticsTests: XCTestCase {
     // MARK: - List Queries
 
     func testListQueriesSendsCorrectRequest() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "queries": [
@@ -275,6 +285,7 @@ final class FederatedAnalyticsTests: XCTestCase {
     // MARK: - Get Query
 
     func testGetQuerySendsCorrectRequest() async throws {
+        await setUpToken()
         SharedMockURLProtocol.responses = [
             .success(statusCode: 200, json: [
                 "id": "q1",
