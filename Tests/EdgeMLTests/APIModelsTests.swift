@@ -1074,13 +1074,16 @@ final class APIModelsTests: XCTestCase {
         let json = """
         {"id":"r1","org_id":"org1","model_id":"m1","version_id":"v1","state":"active",
          "min_clients":2,"max_clients":10,"client_selection_strategy":"random",
-         "aggregation_type":"fedavg","timeout_minutes":30}
+         "aggregation_type":"fedavg","timeout_minutes":30,
+         "differential_privacy":false,"secure_aggregation":false,
+         "selected_client_count":0,"received_update_count":0,
+         "created_at":"2026-01-01T00:00:00Z"}
         """.data(using: .utf8)!
         let round = try JSONDecoder().decode(RoundAssignment.self, from: json)
         XCTAssertEqual(round.id, "r1")
         XCTAssertEqual(round.state, "active")
         XCTAssertEqual(round.minClients, 2)
-        XCTAssertNil(round.differentialPrivacy)
+        XCTAssertFalse(round.differentialPrivacy)
     }
 
     func testHealthResponseDecoding() throws {
@@ -1189,10 +1192,14 @@ final class APIModelsTests: XCTestCase {
 
     func testDownloadURLResponseOptionalFields() throws {
         let json = """
-        {"url":"https://example.com/model.mlmodel","quantization":"int8",
-         "recommended_delegates":["neural_engine"],"input_shape":[1,28,28,1]}
+        {"url":"https://example.com/model.mlmodel",
+         "expires_at":"2026-01-01T00:00:00Z","checksum":"abc123","file_size":1024,
+         "quantization":"int8","recommended_delegates":["neural_engine"],
+         "input_shape":[1,28,28,1]}
         """.data(using: .utf8)!
-        let resp = try JSONDecoder().decode(DownloadURLResponse.self, from: json)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let resp = try decoder.decode(DownloadURLResponse.self, from: json)
         XCTAssertEqual(resp.url, "https://example.com/model.mlmodel")
         XCTAssertEqual(resp.quantization, "int8")
         XCTAssertEqual(resp.recommendedDelegates, ["neural_engine"])
