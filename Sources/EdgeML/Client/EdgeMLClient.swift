@@ -888,9 +888,9 @@ public final class EdgeMLClient: @unchecked Sendable {
                             "cold_inference_ms": String(format: "%.2f", coldInferenceMs),
                             "warm_inference_ms": String(format: "%.2f", warmInferenceMs),
                             "using_neural_engine": String(result.usingNeuralEngine),
-                            "active_delegate": activeDelegate,
+                            "active_delegate": result.activeDelegate,
                             "delegate_disabled": String(result.delegateDisabled),
-                            "disabled_delegates": disabledDelegates.joined(separator: ",")
+                            "disabled_delegates": result.disabledDelegates.joined(separator: ",")
                         ]
                     )
                 )
@@ -1481,8 +1481,6 @@ public final class EdgeMLClient: @unchecked Sendable {
             return "Dictionary"
         case .sequence:
             return "Sequence"
-        case .state:
-            return "State"
         @unknown default:
             return "Unknown"
         }
