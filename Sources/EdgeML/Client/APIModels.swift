@@ -346,6 +346,30 @@ public struct ModelMetadata: Codable, Sendable {
         case inputSchema = "input_schema"
         case outputSchema = "output_schema"
     }
+
+    public init(
+        modelId: String,
+        version: String,
+        checksum: String,
+        fileSize: UInt64,
+        createdAt: Date,
+        format: String,
+        supportsTraining: Bool,
+        description: String?,
+        inputSchema: [String: String]?,
+        outputSchema: [String: String]?
+    ) {
+        self.modelId = modelId
+        self.version = version
+        self.checksum = checksum
+        self.fileSize = fileSize
+        self.createdAt = createdAt
+        self.format = format
+        self.supportsTraining = supportsTraining
+        self.description = description
+        self.inputSchema = inputSchema
+        self.outputSchema = outputSchema
+    }
 }
 
 /// Response schema for a model version (server API).
