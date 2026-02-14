@@ -1119,9 +1119,10 @@ final class APIModelsTests: XCTestCase {
             modelId: "m1",
             version: "1.0",
             roundId: "r1",
+            gradientsPath: nil,
             numSamples: 100,
             trainingTimeMs: 5000,
-            metrics: GradientTrainingMetrics(loss: 0.5, accuracy: 0.9)
+            metrics: GradientTrainingMetrics(loss: 0.5, accuracy: 0.9, numBatches: 10)
         )
         let data = try JSONEncoder().encode(req)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
@@ -1129,8 +1130,8 @@ final class APIModelsTests: XCTestCase {
         XCTAssertEqual(json["num_samples"] as? Int, 100)
     }
 
-    func testWeightUploadRequestFlatEncoding() throws {
-        let req = WeightUploadRequest(
+    func testWeightUpdateFlatEncoding() throws {
+        let req = WeightUpdate(
             modelId: "m1",
             version: "1.0",
             deviceId: "d1",
@@ -1146,8 +1147,8 @@ final class APIModelsTests: XCTestCase {
         XCTAssertNil(json["dp_noise_scale"])
     }
 
-    func testWeightUploadRequestNoDPEncoding() throws {
-        let req = WeightUploadRequest(
+    func testWeightUpdateNoDPEncoding() throws {
+        let req = WeightUpdate(
             modelId: "m1",
             version: "1.0",
             deviceId: nil,
