@@ -63,14 +63,31 @@ pod 'EdgeML', '~> 1.0'
 
 ### Local Inference — No Server Required
 
-Run CoreML models locally with two lines. No server, no auth, no registration needed:
+Deploy and benchmark CoreML models locally. No server, no auth, no registration needed:
 
 ```swift
 import EdgeML
 
-// Load and run a CoreML model — fully offline
-let model = try EdgeMLModel(compiledModelURL: Bundle.main.url(forResource: "classifier", withExtension: "mlmodelc")!)
+// Deploy a model — auto-benchmarks Neural Engine vs CPU, picks fastest
+let model = try Deploy.model(
+    at: Bundle.main.url(forResource: "MobileNet", withExtension: "mlmodelc")!
+)
+
 let result = try model.predict(input: features)
+
+print(model.name)            // "MobileNet"
+print(model.engine)          // .coreml
+print(model.activeDelegate)  // "neural_engine"
+print(model.warmupResult!)   // cold: 45ms, warm: 3ms, cpu: 8ms
+```
+
+Skip benchmarking for faster startup:
+
+```swift
+let model = try Deploy.model(
+    at: modelURL,
+    benchmark: false
+)
 ```
 
 When you're ready to connect to the EdgeML platform, initialize with your API key and the SDK automatically starts reporting metrics.
