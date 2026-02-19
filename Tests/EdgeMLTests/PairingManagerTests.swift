@@ -175,7 +175,7 @@ final class PairingManagerTests: XCTestCase {
             p95LatencyMs: 15.2,
             p99LatencyMs: 22.1,
             memoryPeakBytes: 524_288_000,
-            inferenceCount: 11,
+            inferenceCount: 53,
             modelLoadTimeMs: 1200.0,
             coldInferenceMs: 78.5,
             warmInferenceMs: 11.2,
@@ -201,12 +201,19 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertEqual(decoded.p95LatencyMs, 15.2, accuracy: 0.01)
         XCTAssertEqual(decoded.p99LatencyMs, 22.1, accuracy: 0.01)
         XCTAssertEqual(decoded.memoryPeakBytes, 524_288_000)
-        XCTAssertEqual(decoded.inferenceCount, 11)
+        XCTAssertEqual(decoded.inferenceCount, 53)
         XCTAssertEqual(decoded.modelLoadTimeMs, 1200.0, accuracy: 0.01)
         XCTAssertEqual(decoded.coldInferenceMs, 78.5, accuracy: 0.01)
         XCTAssertEqual(decoded.warmInferenceMs, 11.2, accuracy: 0.01)
         XCTAssertEqual(decoded.batteryLevel, 0.85, accuracy: 0.01)
         XCTAssertEqual(decoded.thermalState, "nominal")
+        // New optional fields should be nil when not provided
+        XCTAssertNil(decoded.promptTokens)
+        XCTAssertNil(decoded.completionTokens)
+        XCTAssertNil(decoded.contextLength)
+        XCTAssertNil(decoded.totalTokens)
+        XCTAssertNil(decoded.activeDelegate)
+        XCTAssertNil(decoded.disabledDelegates)
     }
 
     func testBenchmarkReportSnakeCaseKeys() throws {
@@ -223,7 +230,7 @@ final class PairingManagerTests: XCTestCase {
             "p95_latency_ms": 14.0,
             "p99_latency_ms": 20.0,
             "memory_peak_bytes": 500_000_000,
-            "inference_count": 11,
+            "inference_count": 53,
             "model_load_time_ms": 1000.0,
             "cold_inference_ms": 60.0,
             "warm_inference_ms": 9.0,
@@ -235,8 +242,16 @@ final class PairingManagerTests: XCTestCase {
 
         XCTAssertEqual(report.modelName, "test")
         XCTAssertEqual(report.tokensPerSecond, 100.0)
+        XCTAssertEqual(report.inferenceCount, 53)
         XCTAssertNil(report.batteryLevel)
         XCTAssertNil(report.thermalState)
+        // New optional fields absent from JSON should decode as nil
+        XCTAssertNil(report.promptTokens)
+        XCTAssertNil(report.completionTokens)
+        XCTAssertNil(report.contextLength)
+        XCTAssertNil(report.totalTokens)
+        XCTAssertNil(report.activeDelegate)
+        XCTAssertNil(report.disabledDelegates)
     }
 
     // MARK: - PairingDeviceCapabilities Tests
@@ -373,10 +388,12 @@ final class PairingManagerTests: XCTestCase {
             p95LatencyMs: 14.0,
             p99LatencyMs: 20.0,
             memoryPeakBytes: 500_000_000,
-            inferenceCount: 11,
+            inferenceCount: 53,
             modelLoadTimeMs: 1000.0,
             coldInferenceMs: 60.0,
             warmInferenceMs: 9.0,
+            activeDelegate: "neural_engine",
+            disabledDelegates: [],
             batteryLevel: 0.9,
             thermalState: "nominal"
         )
@@ -546,7 +563,7 @@ final class PairingManagerTests: XCTestCase {
             p95LatencyMs: 14.0,
             p99LatencyMs: 20.0,
             memoryPeakBytes: 500_000_000,
-            inferenceCount: 11,
+            inferenceCount: 53,
             modelLoadTimeMs: 1000.0,
             coldInferenceMs: 60.0,
             warmInferenceMs: 9.0
@@ -573,6 +590,229 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertNotNil(json["model_load_time_ms"])
         XCTAssertNotNil(json["cold_inference_ms"])
         XCTAssertNotNil(json["warm_inference_ms"])
+    }
+
+    // MARK: - BenchmarkReport Token Fields Tests
+
+    func testBenchmarkReportWithTokenFields() throws {
+        let report = BenchmarkReport(
+            modelName: "llama-7b",
+            deviceName: "iPhone 16 Pro",
+            chipFamily: "A18 Pro",
+            ramGB: 8.0,
+            osVersion: "18.0",
+            ttftMs: 120.5,
+            tpotMs: 15.3,
+            tokensPerSecond: 65.4,
+            p50LatencyMs: 14.8,
+            p95LatencyMs: 18.2,
+            p99LatencyMs: 25.1,
+            memoryPeakBytes: 1_073_741_824,
+            inferenceCount: 53,
+            modelLoadTimeMs: 2500.0,
+            coldInferenceMs: 150.0,
+            warmInferenceMs: 14.5,
+            promptTokens: 128,
+            completionTokens: 256,
+            contextLength: 2048,
+            totalTokens: 384
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(report)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        // Verify token fields are encoded with snake_case keys
+        XCTAssertEqual(json["prompt_tokens"] as? Int, 128)
+        XCTAssertEqual(json["completion_tokens"] as? Int, 256)
+        XCTAssertEqual(json["context_length"] as? Int, 2048)
+        XCTAssertEqual(json["total_tokens"] as? Int, 384)
+
+        // Round-trip decode
+        let decoded = try JSONDecoder().decode(BenchmarkReport.self, from: data)
+        XCTAssertEqual(decoded.promptTokens, 128)
+        XCTAssertEqual(decoded.completionTokens, 256)
+        XCTAssertEqual(decoded.contextLength, 2048)
+        XCTAssertEqual(decoded.totalTokens, 384)
+    }
+
+    func testBenchmarkReportTokenFieldsDecodeFromJSON() throws {
+        let json: [String: Any] = [
+            "model_name": "test",
+            "device_name": "iPhone",
+            "chip_family": "A17",
+            "ram_gb": 8.0,
+            "os_version": "17.0",
+            "ttft_ms": 50.0,
+            "tpot_ms": 10.0,
+            "tokens_per_second": 100.0,
+            "p50_latency_ms": 9.5,
+            "p95_latency_ms": 14.0,
+            "p99_latency_ms": 20.0,
+            "memory_peak_bytes": 500_000_000,
+            "inference_count": 53,
+            "model_load_time_ms": 1000.0,
+            "cold_inference_ms": 60.0,
+            "warm_inference_ms": 9.0,
+            "prompt_tokens": 64,
+            "completion_tokens": 128,
+            "context_length": 4096,
+            "total_tokens": 192,
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let report = try JSONDecoder().decode(BenchmarkReport.self, from: data)
+
+        XCTAssertEqual(report.promptTokens, 64)
+        XCTAssertEqual(report.completionTokens, 128)
+        XCTAssertEqual(report.contextLength, 4096)
+        XCTAssertEqual(report.totalTokens, 192)
+    }
+
+    // MARK: - BenchmarkReport Delegate Fields Tests
+
+    func testBenchmarkReportWithDelegateFields() throws {
+        let report = BenchmarkReport(
+            modelName: "llama-3b",
+            deviceName: "iPhone 15 Pro",
+            chipFamily: "A17 Pro",
+            ramGB: 8.0,
+            osVersion: "17.4",
+            ttftMs: 45.0,
+            tpotMs: 12.0,
+            tokensPerSecond: 83.3,
+            p50LatencyMs: 11.5,
+            p95LatencyMs: 15.0,
+            p99LatencyMs: 21.0,
+            memoryPeakBytes: 524_288_000,
+            inferenceCount: 53,
+            modelLoadTimeMs: 1200.0,
+            coldInferenceMs: 78.0,
+            warmInferenceMs: 11.0,
+            activeDelegate: "neural_engine",
+            disabledDelegates: []
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(report)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        // Verify delegate fields are encoded with snake_case keys
+        XCTAssertEqual(json["active_delegate"] as? String, "neural_engine")
+        XCTAssertNotNil(json["disabled_delegates"])
+
+        // Round-trip decode
+        let decoded = try JSONDecoder().decode(BenchmarkReport.self, from: data)
+        XCTAssertEqual(decoded.activeDelegate, "neural_engine")
+        XCTAssertEqual(decoded.disabledDelegates, [])
+    }
+
+    func testBenchmarkReportWithDisabledDelegates() throws {
+        let report = BenchmarkReport(
+            modelName: "tiny-model",
+            deviceName: "iPhone 14",
+            chipFamily: "A15 Bionic",
+            ramGB: 6.0,
+            osVersion: "17.2",
+            ttftMs: 80.0,
+            tpotMs: 20.0,
+            tokensPerSecond: 50.0,
+            p50LatencyMs: 19.0,
+            p95LatencyMs: 25.0,
+            p99LatencyMs: 30.0,
+            memoryPeakBytes: 256_000_000,
+            inferenceCount: 53,
+            modelLoadTimeMs: 800.0,
+            coldInferenceMs: 100.0,
+            warmInferenceMs: 18.0,
+            activeDelegate: "cpu",
+            disabledDelegates: ["neural_engine", "gpu"]
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(report)
+
+        let decoded = try JSONDecoder().decode(BenchmarkReport.self, from: data)
+        XCTAssertEqual(decoded.activeDelegate, "cpu")
+        XCTAssertEqual(decoded.disabledDelegates, ["neural_engine", "gpu"])
+    }
+
+    func testBenchmarkReportDelegateFieldsDecodeFromJSON() throws {
+        let json: [String: Any] = [
+            "model_name": "test",
+            "device_name": "iPhone",
+            "chip_family": "A17",
+            "ram_gb": 8.0,
+            "os_version": "17.0",
+            "ttft_ms": 50.0,
+            "tpot_ms": 10.0,
+            "tokens_per_second": 100.0,
+            "p50_latency_ms": 9.5,
+            "p95_latency_ms": 14.0,
+            "p99_latency_ms": 20.0,
+            "memory_peak_bytes": 500_000_000,
+            "inference_count": 53,
+            "model_load_time_ms": 1000.0,
+            "cold_inference_ms": 60.0,
+            "warm_inference_ms": 9.0,
+            "active_delegate": "gpu",
+            "disabled_delegates": ["neural_engine"],
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let report = try JSONDecoder().decode(BenchmarkReport.self, from: data)
+
+        XCTAssertEqual(report.activeDelegate, "gpu")
+        XCTAssertEqual(report.disabledDelegates, ["neural_engine"])
+    }
+
+    func testBenchmarkReportAllNewFieldsCombined() throws {
+        let report = BenchmarkReport(
+            modelName: "llama-7b-chat",
+            deviceName: "iPhone 16 Pro Max",
+            chipFamily: "A18 Pro",
+            ramGB: 8.0,
+            osVersion: "18.0",
+            ttftMs: 95.0,
+            tpotMs: 11.0,
+            tokensPerSecond: 90.9,
+            p50LatencyMs: 10.5,
+            p95LatencyMs: 14.0,
+            p99LatencyMs: 19.0,
+            memoryPeakBytes: 1_500_000_000,
+            inferenceCount: 53,
+            modelLoadTimeMs: 3000.0,
+            coldInferenceMs: 130.0,
+            warmInferenceMs: 10.0,
+            promptTokens: 256,
+            completionTokens: 512,
+            contextLength: 8192,
+            totalTokens: 768,
+            activeDelegate: "neural_engine",
+            disabledDelegates: [],
+            batteryLevel: 0.72,
+            thermalState: "fair"
+        )
+
+        let data = try JSONEncoder().encode(report)
+        let decoded = try JSONDecoder().decode(BenchmarkReport.self, from: data)
+
+        // Token fields
+        XCTAssertEqual(decoded.promptTokens, 256)
+        XCTAssertEqual(decoded.completionTokens, 512)
+        XCTAssertEqual(decoded.contextLength, 8192)
+        XCTAssertEqual(decoded.totalTokens, 768)
+
+        // Delegate fields
+        XCTAssertEqual(decoded.activeDelegate, "neural_engine")
+        XCTAssertEqual(decoded.disabledDelegates, [])
+
+        // Existing context fields still work
+        XCTAssertEqual(decoded.batteryLevel, 0.72, accuracy: 0.01)
+        XCTAssertEqual(decoded.thermalState, "fair")
+
+        // Inference count reflects 50 warm + overhead
+        XCTAssertEqual(decoded.inferenceCount, 53)
     }
 
     // MARK: - PairingSession CodingKeys Tests
@@ -622,7 +862,7 @@ final class PairingManagerTests: XCTestCase {
             p95LatencyMs: 12.0,
             p99LatencyMs: 18.0,
             memoryPeakBytes: 400_000_000,
-            inferenceCount: 11,
+            inferenceCount: 53,
             modelLoadTimeMs: 900.0,
             coldInferenceMs: 55.0,
             warmInferenceMs: 7.0
