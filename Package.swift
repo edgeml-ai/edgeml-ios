@@ -14,6 +14,10 @@ let package = Package(
             name: "EdgeML",
             targets: ["EdgeML"]
         ),
+        .library(
+            name: "EdgeMLClip",
+            targets: ["EdgeMLClip"]
+        ),
     ],
     dependencies: [],
     targets: [
@@ -21,6 +25,11 @@ let package = Package(
             name: "EdgeML",
             dependencies: [],
             path: "Sources/EdgeML"
+        ),
+        .target(
+            name: "EdgeMLClip",
+            dependencies: ["EdgeML"],
+            path: "Sources/EdgeMLClip"
         ),
         .testTarget(
             name: "EdgeMLTests",
