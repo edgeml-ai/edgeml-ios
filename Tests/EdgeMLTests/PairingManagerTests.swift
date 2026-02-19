@@ -599,4 +599,154 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertEqual(session.status, .done)
         XCTAssertEqual(session.deviceTier, "iphone_15_pro")
     }
+
+    // MARK: - PairingManager submitBenchmark Tests
+
+    func testSubmitBenchmarkSendsToCorrectEndpoint() async throws {
+        let manager = makePairingManager()
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: [:]),
+        ]
+
+        let report = BenchmarkReport(
+            modelName: "bench-model",
+            deviceName: "iPhone 15 Pro",
+            chipFamily: "A17 Pro",
+            ramGB: 8.0,
+            osVersion: "17.4",
+            ttftMs: 40.0,
+            tpotMs: 8.0,
+            tokensPerSecond: 125.0,
+            p50LatencyMs: 7.5,
+            p95LatencyMs: 12.0,
+            p99LatencyMs: 18.0,
+            memoryPeakBytes: 400_000_000,
+            inferenceCount: 11,
+            modelLoadTimeMs: 900.0,
+            coldInferenceMs: 55.0,
+            warmInferenceMs: 7.0
+        )
+
+        try await manager.submitBenchmark(code: "CODE42", report: report)
+
+        let request = try XCTUnwrap(SharedMockURLProtocol.requests.first)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertTrue(request.url?.path.contains("api/v1/deploy/pair/CODE42/benchmark") == true)
+    }
+
+    // MARK: - PairingManager WaitForDeployment Timeout Tests
+
+    func testWaitForDeploymentReturnsOnDoneStatus() async throws {
+        let manager = makePairingManager()
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: sessionJSON(
+                status: "done",
+                downloadURL: "https://cdn.example.com/final.mlmodel",
+                downloadFormat: "coreml"
+            )),
+        ]
+
+        let deployment = try await manager.waitForDeployment(code: "TEST123", timeout: 5)
+
+        XCTAssertEqual(deployment.modelName, "llama-3b")
+        XCTAssertEqual(deployment.downloadURL, "https://cdn.example.com/final.mlmodel")
+        XCTAssertEqual(deployment.modelVersion, "latest") // default when nil
+    }
+
+    // MARK: - PairingManager Connect Uses Auto Caps
+
+    func testConnectUsesAutoDetectedCapsWhenNoneProvided() async throws {
+        let manager = makePairingManager()
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: sessionJSON(status: "connected")),
+        ]
+
+        // Call without explicit caps — should auto-detect
+        let session = try await manager.connect(code: "AUTO")
+
+        XCTAssertEqual(session.status, .connected)
+
+        // Verify the request was sent with device info
+        let request = try XCTUnwrap(SharedMockURLProtocol.requests.first)
+        let body = try XCTUnwrap(request.httpBody)
+        let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNotNil(parsed["device_name"])
+        XCTAssertNotNil(parsed["platform"])
+        XCTAssertEqual(parsed["platform"] as? String, "ios")
+    }
+
+    // MARK: - DeploymentInfo Optional Fields
+
+    func testDeploymentInfoOptionalFields() {
+        let minimal = DeploymentInfo(
+            modelName: "m",
+            modelVersion: "v1",
+            downloadURL: "https://x.com/m",
+            format: "coreml"
+        )
+
+        XCTAssertEqual(minimal.modelName, "m")
+        XCTAssertNil(minimal.quantization)
+        XCTAssertNil(minimal.executor)
+        XCTAssertNil(minimal.sizeBytes)
+    }
+
+    // MARK: - ConnectToPairing with nil optional fields
+
+    func testConnectToPairingOmitsNilFields() async throws {
+        let client = makeAPIClient()
+
+        SharedMockURLProtocol.responses = [
+            .success(statusCode: 200, json: sessionJSON(status: "connected")),
+        ]
+
+        _ = try await client.connectToPairing(
+            code: "TEST",
+            deviceId: "d1",
+            platform: "ios",
+            deviceName: "iPhone",
+            chipFamily: nil,
+            ramGB: nil,
+            osVersion: nil,
+            npuAvailable: nil,
+            gpuAvailable: nil
+        )
+
+        let request = try XCTUnwrap(SharedMockURLProtocol.requests.first)
+        let body = try XCTUnwrap(request.httpBody)
+        let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        // Required fields present
+        XCTAssertEqual(parsed["device_id"] as? String, "d1")
+        XCTAssertEqual(parsed["device_name"] as? String, "iPhone")
+
+        // Optional fields should be absent
+        XCTAssertNil(parsed["chip_family"])
+        XCTAssertNil(parsed["ram_gb"])
+        XCTAssertNil(parsed["os_version"])
+        XCTAssertNil(parsed["npu_available"])
+        XCTAssertNil(parsed["gpu_available"])
+    }
+
+    // MARK: - PairingStatus Decoding
+
+    func testAllPairingStatusesCanBeDecoded() throws {
+        let statuses = ["pending", "connected", "deploying", "done", "expired", "cancelled"]
+        let expected: [PairingStatus] = [.pending, .connected, .deploying, .done, .expired, .cancelled]
+
+        for (raw, expected) in zip(statuses, expected) {
+            let json: [String: Any] = [
+                "id": "s1",
+                "code": "X",
+                "model_name": "m",
+                "status": raw,
+            ]
+            let data = try JSONSerialization.data(withJSONObject: json)
+            let session = try JSONDecoder().decode(PairingSession.self, from: data)
+            XCTAssertEqual(session.status, expected, "Failed for status: \(raw)")
+        }
+    }
 }
