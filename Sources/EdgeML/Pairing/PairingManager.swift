@@ -1,6 +1,9 @@
 import Foundation
 import CoreML
 import os.log
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Manages the QR code pairing flow for deploying models to this device.
 ///
@@ -236,6 +239,15 @@ public actor PairingManager {
         return report
     }
 
+    /// Submit benchmark results to the server.
+    ///
+    /// - Parameters:
+    ///   - code: Pairing code.
+    ///   - report: Benchmark report to submit.
+    public func submitBenchmark(code: String, report: BenchmarkReport) async throws {
+        try await apiClient.submitPairingBenchmark(code: code, report: report)
+    }
+
     /// Full pairing flow: connect, wait for deployment, download, benchmark, and report.
     ///
     /// This is the recommended single-call API for the pairing flow.
@@ -392,9 +404,15 @@ public actor PairingManager {
     /// Returns current battery level as a Double (0.0 - 1.0), or nil if unavailable.
     private func currentBatteryLevel() -> Double? {
         #if canImport(UIKit) && os(iOS)
-        // UIDevice must be accessed from main thread
-        // We'll use ProcessInfo as a safe alternative since we're in an actor
-        return nil // Battery monitoring requires UIDevice on main thread
+        // UIDevice.current requires main thread, but we're inside an actor.
+        // Use a synchronous DispatchQueue.main.sync call to safely read it.
+        let level: Float = DispatchQueue.main.sync {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let l = UIDevice.current.batteryLevel
+            UIDevice.current.isBatteryMonitoringEnabled = false
+            return l
+        }
+        return level >= 0 ? Double(level) : nil
         #else
         return nil
         #endif

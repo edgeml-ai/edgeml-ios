@@ -378,25 +378,20 @@ final class PairingViewModel: ObservableObject {
             do {
                 let manager = PairingManager(serverURL: serverURL)
 
-                // Connect
+                // Step 1: Connect to session
                 let session = try await manager.connect(code: code)
                 state = .waiting(modelName: session.modelName)
 
-                // Wait for deployment
+                // Step 2: Wait for model deployment
                 let deployment = try await manager.waitForDeployment(code: code)
                 state = .downloading(progress: 0.5)
 
-                // Execute deployment (download + benchmark)
+                // Step 3: Download model and run benchmarks
                 state = .benchmarking(metrics: LiveMetrics())
                 let report = try await manager.executeDeployment(deployment)
 
-                // Submit results
-                // Wrap the actor method call
-                let apiClient = APIClient(
-                    serverURL: serverURL,
-                    configuration: .standard
-                )
-                try await apiClient.submitPairingBenchmark(code: code, report: report)
+                // Step 4: Submit benchmark results
+                try? await manager.submitBenchmark(code: code, report: report)
 
                 state = .complete(report: report)
             } catch {
