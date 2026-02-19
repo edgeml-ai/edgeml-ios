@@ -150,9 +150,6 @@ public actor DeviceStateMonitor {
 
     #if os(iOS)
     private func enableBatteryMonitoring() {
-        // Must be called to get real battery values from UIDevice.
-        // UIDevice is @MainActor, but setting this property is safe from any thread
-        // because the underlying implementation is thread-safe.
         Task { @MainActor in
             UIDevice.current.isBatteryMonitoringEnabled = true
         }
@@ -179,7 +176,8 @@ public actor DeviceStateMonitor {
         }
         observerTokens.append(thermalToken)
 
-        // Low Power Mode changes
+        // Low Power Mode changes (macOS 12+ / iOS 9+)
+        #if os(iOS)
         let powerToken = center.addObserver(
             forName: NSNotification.Name.NSProcessInfoPowerStateDidChange,
             object: nil,
@@ -189,6 +187,19 @@ public actor DeviceStateMonitor {
             Task { await self.refreshState() }
         }
         observerTokens.append(powerToken)
+        #elseif os(macOS)
+        if #available(macOS 12.0, *) {
+            let powerToken = center.addObserver(
+                forName: NSNotification.Name.NSProcessInfoPowerStateDidChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let self else { return }
+                Task { await self.refreshState() }
+            }
+            observerTokens.append(powerToken)
+        }
+        #endif
 
         #if os(iOS)
         // Battery level changes
@@ -257,7 +268,7 @@ public actor DeviceStateMonitor {
 
         let thermalState = mapThermalState(ProcessInfo.processInfo.thermalState)
         let availableMemoryMB = readAvailableMemoryMB()
-        let isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        let isLowPowerMode = readIsLowPowerMode()
 
         return DeviceState(
             batteryLevel: batteryLevel,
@@ -300,9 +311,29 @@ public actor DeviceStateMonitor {
         }
     }
 
+    private nonisolated func readIsLowPowerMode() -> Bool {
+        #if os(iOS)
+        return ProcessInfo.processInfo.isLowPowerModeEnabled
+        #elseif os(macOS)
+        if #available(macOS 12.0, *) {
+            return ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
+        return false
+        #else
+        return false
+        #endif
+    }
+
     private nonisolated func readAvailableMemoryMB() -> Int {
-        // os_proc_available_memory() returns bytes, available since iOS 13 / macOS 10.15
+        #if os(iOS) || os(tvOS) || os(watchOS)
+        // os_proc_available_memory() is available on iOS 13+ / tvOS 13+ / watchOS 6+
         let bytes = os_proc_available_memory()
         return Int(bytes / (1024 * 1024))
+        #else
+        // On macOS, os_proc_available_memory() is unavailable.
+        // Use ProcessInfo physical memory as a rough upper bound.
+        let totalBytes = ProcessInfo.processInfo.physicalMemory
+        return Int(totalBytes / (1024 * 1024))
+        #endif
     }
 }
