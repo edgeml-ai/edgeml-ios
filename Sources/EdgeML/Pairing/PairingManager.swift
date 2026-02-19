@@ -29,7 +29,8 @@ public actor PairingManager {
     private let logger: Logger
 
     /// Default number of warm inferences during benchmarking.
-    private static let defaultWarmInferenceCount = 10
+    /// 50 gives meaningful p95/p99 percentiles without taking too long (~3-5s).
+    private static let defaultWarmInferenceCount = 50
 
     /// Default polling interval in seconds when waiting for deployment.
     private static let defaultPollInterval: TimeInterval = 2.0
@@ -224,9 +225,10 @@ public actor PairingManager {
 
         let modelLoadTimeMs = Date().timeIntervalSince(modelLoadStart) * 1000
 
-        // Run benchmarks
+        // Run benchmarks (pass compiledURL for CPU-only delegate comparison)
         let report = try runBenchmarks(
             model: mlModel,
+            compiledURL: compiledURL,
             modelName: deployment.modelName,
             modelLoadTimeMs: modelLoadTimeMs
         )
@@ -289,8 +291,15 @@ public actor PairingManager {
     // MARK: - Benchmarking
 
     /// Runs the benchmark sequence on a compiled model.
+    ///
+    /// Flow:
+    /// 1. Cold inference (captures TTFT)
+    /// 2. Delegate auto-selection (warm pass vs CPU-only pass)
+    /// 3. 50 warm inferences for percentile calculations
+    /// 4. Assemble the benchmark report
     private func runBenchmarks(
         model: MLModel,
+        compiledURL: URL,
         modelName: String,
         modelLoadTimeMs: Double
     ) throws -> BenchmarkReport {
@@ -307,7 +316,42 @@ public actor PairingManager {
         _ = try? model.prediction(from: dummyInput)
         let coldInferenceMs = Date().timeIntervalSince(coldStart) * 1000
 
-        // Warm inferences
+        // Delegate auto-selection: warm pass then CPU-only comparison
+        let warmupStart = Date()
+        _ = try? model.prediction(from: dummyInput)
+        let warmPassMs = Date().timeIntervalSince(warmupStart) * 1000
+
+        var cpuInferenceMs: Double? = nil
+        let cpuConfig = MLModelConfiguration()
+        cpuConfig.computeUnits = .cpuOnly
+        if let cpuModel = try? MLModel(contentsOf: compiledURL, configuration: cpuConfig) {
+            let cpuStart = Date()
+            _ = try? cpuModel.prediction(from: dummyInput)
+            cpuInferenceMs = Date().timeIntervalSince(cpuStart) * 1000
+        }
+
+        let hasNPU = detectNPUAvailable()
+        var activeDelegate = hasNPU ? "neural_engine" : "gpu"
+        var disabledDelegates: [String] = []
+
+        // If CPU is faster than the hardware-accelerated warm pass, disable the accelerator
+        if let cpuMs = cpuInferenceMs, cpuMs < warmPassMs {
+            if hasNPU {
+                disabledDelegates.append("neural_engine")
+            } else {
+                disabledDelegates.append("gpu")
+            }
+            activeDelegate = "cpu"
+        }
+
+        if configuration.enableLogging {
+            let warmStr = String(format: "%.1f", warmPassMs)
+            let cpuStr = cpuInferenceMs.map { String(format: "%.1f", $0) } ?? "n/a"
+            let disabledStr = disabledDelegates.joined(separator: ",")
+            logger.info("Delegate selected: \(activeDelegate), disabled: [\(disabledStr)], warm=\(warmStr)ms, cpu=\(cpuStr)ms")
+        }
+
+        // Warm inferences (50 iterations for meaningful percentiles)
         var latencies: [Double] = []
         for _ in 0..<Self.defaultWarmInferenceCount {
             let start = Date()
@@ -340,6 +384,9 @@ public actor PairingManager {
         // Thermal state
         let thermalState = currentThermalState()
 
+        // Total inference count: 1 cold + 1 warm-pass + 1 CPU-pass (if run) + N warm
+        let totalInferences = Self.defaultWarmInferenceCount + 2 + (cpuInferenceMs != nil ? 1 : 0)
+
         return BenchmarkReport(
             modelName: modelName,
             deviceName: caps.deviceName,
@@ -353,10 +400,12 @@ public actor PairingManager {
             p95LatencyMs: p95,
             p99LatencyMs: p99,
             memoryPeakBytes: memoryPeakBytes,
-            inferenceCount: Self.defaultWarmInferenceCount + 1,
+            inferenceCount: totalInferences,
             modelLoadTimeMs: modelLoadTimeMs,
             coldInferenceMs: coldInferenceMs,
             warmInferenceMs: warmInferenceMs,
+            activeDelegate: activeDelegate,
+            disabledDelegates: disabledDelegates,
             batteryLevel: batteryLevel,
             thermalState: thermalState
         )
@@ -415,6 +464,20 @@ public actor PairingManager {
         return level >= 0 ? Double(level) : nil
         #else
         return nil
+        #endif
+    }
+
+    /// Detects whether the Neural Processing Unit is available.
+    ///
+    /// On real iOS hardware (A11+) the Neural Engine is always present.
+    /// Returns false on macOS and Simulator.
+    private func detectNPUAvailable() -> Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #elseif os(iOS) || os(tvOS) || os(watchOS)
+        return true
+        #else
+        return false
         #endif
     }
 

@@ -151,6 +151,22 @@ public struct BenchmarkReport: Codable, Sendable {
     /// Steady-state (warm) inference latency in milliseconds.
     public let warmInferenceMs: Double
 
+    // -- Token Metrics --
+    /// Number of prompt tokens processed, if applicable.
+    public let promptTokens: Int?
+    /// Number of completion tokens generated, if applicable.
+    public let completionTokens: Int?
+    /// Context length used for inference, if applicable.
+    public let contextLength: Int?
+    /// Total tokens (prompt + completion), if applicable.
+    public let totalTokens: Int?
+
+    // -- Delegate Selection --
+    /// Which compute delegate was selected after warmup: "neural_engine", "gpu", or "cpu".
+    public let activeDelegate: String?
+    /// Delegates that were disabled during warmup cascade.
+    public let disabledDelegates: [String]?
+
     // -- Context --
     /// Device battery level at benchmark time (0.0-1.0), or nil if unavailable.
     public let batteryLevel: Double?
@@ -174,6 +190,12 @@ public struct BenchmarkReport: Codable, Sendable {
         case modelLoadTimeMs = "model_load_time_ms"
         case coldInferenceMs = "cold_inference_ms"
         case warmInferenceMs = "warm_inference_ms"
+        case promptTokens = "prompt_tokens"
+        case completionTokens = "completion_tokens"
+        case contextLength = "context_length"
+        case totalTokens = "total_tokens"
+        case activeDelegate = "active_delegate"
+        case disabledDelegates = "disabled_delegates"
         case batteryLevel = "battery_level"
         case thermalState = "thermal_state"
     }
@@ -195,6 +217,12 @@ public struct BenchmarkReport: Codable, Sendable {
         modelLoadTimeMs: Double,
         coldInferenceMs: Double,
         warmInferenceMs: Double,
+        promptTokens: Int? = nil,
+        completionTokens: Int? = nil,
+        contextLength: Int? = nil,
+        totalTokens: Int? = nil,
+        activeDelegate: String? = nil,
+        disabledDelegates: [String]? = nil,
         batteryLevel: Double? = nil,
         thermalState: String? = nil
     ) {
@@ -214,6 +242,12 @@ public struct BenchmarkReport: Codable, Sendable {
         self.modelLoadTimeMs = modelLoadTimeMs
         self.coldInferenceMs = coldInferenceMs
         self.warmInferenceMs = warmInferenceMs
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.contextLength = contextLength
+        self.totalTokens = totalTokens
+        self.activeDelegate = activeDelegate
+        self.disabledDelegates = disabledDelegates
         self.batteryLevel = batteryLevel
         self.thermalState = thermalState
     }
