@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import EdgeML
+import CoreML
 
 /// Main view for the EdgeML App Clip pairing flow.
 ///
@@ -9,7 +10,7 @@ import EdgeML
 /// - Waiting for model deployment
 /// - Downloading the model
 /// - Running benchmarks
-/// - Displaying results
+/// - Displaying results with interactive inference
 public struct PairingView: View {
 
     @StateObject private var viewModel = PairingViewModel()
@@ -198,6 +199,13 @@ public struct PairingView: View {
                         row(label: "Chip", value: report.chipFamily)
                         row(label: "RAM", value: String(format: "%.1f GB", report.ramGB))
                         row(label: "OS", value: "iOS \(report.osVersion)")
+                        if let delegate = report.activeDelegate {
+                            Divider()
+                            row(label: "Delegate", value: delegateDisplayName(delegate))
+                        }
+                        if let disabled = report.disabledDelegates, !disabled.isEmpty {
+                            row(label: "Disabled", value: disabled.map { delegateDisplayName($0) }.joined(separator: ", "))
+                        }
                     }
                 } label: {
                     Label("Configuration", systemImage: "cpu")
@@ -247,7 +255,84 @@ public struct PairingView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                 }
+
+                // Interactive Inference Section
+                interactiveInferenceSection
             }
+        }
+    }
+
+    // MARK: - Interactive Inference
+
+    private var interactiveInferenceSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Enter a prompt...", text: $viewModel.prompt, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...4)
+                    .disabled(viewModel.isRunningInference)
+
+                Button {
+                    viewModel.runInference()
+                } label: {
+                    HStack {
+                        if viewModel.isRunningInference {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(viewModel.isRunningInference ? "Running..." : "Run Inference")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.prompt.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isRunningInference)
+
+                if !viewModel.response.isEmpty {
+                    Divider()
+
+                    Text(viewModel.response)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(8)
+
+                    if let metrics = viewModel.lastInferenceMetrics {
+                        HStack(spacing: 8) {
+                            MetricPill(
+                                label: "Tokens/s",
+                                value: String(format: "%.1f", metrics.tokensPerSecond)
+                            )
+                            MetricPill(
+                                label: "TTFT",
+                                value: String(format: "%.0f ms", metrics.ttftMs)
+                            )
+                            MetricPill(
+                                label: "Tokens",
+                                value: "\(metrics.totalTokens)"
+                            )
+                        }
+
+                        HStack(spacing: 8) {
+                            MetricPill(
+                                label: "Prompt",
+                                value: "\(metrics.promptTokens)"
+                            )
+                            MetricPill(
+                                label: "Completion",
+                                value: "\(metrics.completionTokens)"
+                            )
+                            MetricPill(
+                                label: "Latency",
+                                value: String(format: "%.0f ms", metrics.totalLatencyMs)
+                            )
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Try it", systemImage: "text.cursor")
         }
     }
 
@@ -294,6 +379,15 @@ public struct PairingView: View {
         return String(format: "%.1f MB", mb)
     }
 
+    private func delegateDisplayName(_ delegate: String) -> String {
+        switch delegate {
+        case "neural_engine": return "Neural Engine"
+        case "gpu": return "GPU"
+        case "cpu": return "CPU"
+        default: return delegate
+        }
+    }
+
     // MARK: - URL Handling
 
     private func handleIncomingURL(_ activity: NSUserActivity) {
@@ -321,12 +415,48 @@ public struct PairingView: View {
     }
 }
 
+// MARK: - MetricPill
+
+/// Small pill showing a label/value pair, used for per-request inference metrics.
+struct MetricPill: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .fontWeight(.semibold)
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .background(Color.accentColor.opacity(0.08))
+        .cornerRadius(6)
+    }
+}
+
+// MARK: - InferenceMetrics
+
+/// Per-request metrics from a single interactive inference run.
+struct InferenceMetrics {
+    let tokensPerSecond: Double
+    let ttftMs: Double
+    let promptTokens: Int
+    let completionTokens: Int
+    let totalTokens: Int
+    let totalLatencyMs: Double
+}
+
 // MARK: - Live Metrics
 
 /// Live metrics displayed during benchmarking.
 struct LiveMetrics {
     var currentInference: Int = 0
-    var totalInferences: Int = 11  // 1 cold + 10 warm
+    var totalInferences: Int = 53  // 1 cold + 1 warm-pass + 1 cpu-pass + 50 warm
     var lastLatencyMs: Double?
 }
 
@@ -345,11 +475,20 @@ enum PairingState {
 
 // MARK: - View Model
 
-/// View model driving the pairing flow.
+/// View model driving the pairing flow and interactive inference.
 @MainActor
 final class PairingViewModel: ObservableObject {
 
     @Published var state: PairingState = .idle
+
+    // Interactive inference state
+    @Published var prompt: String = ""
+    @Published var response: String = ""
+    @Published var isRunningInference: Bool = false
+    @Published var lastInferenceMetrics: InferenceMetrics?
+
+    /// Compiled model URL kept alive for interactive inference after benchmarks.
+    private var compiledModelURL: URL?
 
     /// Text for the share sheet.
     var shareText: String? {
@@ -369,6 +508,11 @@ final class PairingViewModel: ObservableObject {
 
     func reset() {
         state = .idle
+        prompt = ""
+        response = ""
+        isRunningInference = false
+        lastInferenceMetrics = nil
+        compiledModelURL = nil
     }
 
     func startPairing(code: String, serverURL: URL) {
@@ -398,6 +542,100 @@ final class PairingViewModel: ObservableObject {
                 state = .error(message: error.localizedDescription)
             }
         }
+    }
+
+    // MARK: - Interactive Inference
+
+    func runInference() {
+        guard !prompt.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard !isRunningInference else { return }
+
+        isRunningInference = true
+        response = ""
+        lastInferenceMetrics = nil
+
+        let currentPrompt = prompt
+
+        Task {
+            let inferenceStart = Date()
+
+            // Attempt streaming inference via LLMEngine if we have a compiled model
+            if let modelURL = compiledModelURL {
+                await runStreamingInference(prompt: currentPrompt, modelURL: modelURL, start: inferenceStart)
+            } else {
+                // Fallback: run single-shot prediction with the raw MLModel
+                await runSingleShotInference(prompt: currentPrompt, start: inferenceStart)
+            }
+
+            isRunningInference = false
+        }
+    }
+
+    /// Run streaming inference using LLMEngine and collect per-token metrics.
+    private func runStreamingInference(prompt: String, modelURL: URL, start: Date) async {
+        let engine = LLMEngine(modelPath: modelURL)
+        let wrapper = InstrumentedStreamWrapper(modality: .text)
+        let (stream, getResult) = wrapper.wrap(engine, input: prompt)
+
+        // Estimate prompt tokens (rough: split by whitespace)
+        let promptTokenCount = prompt.split(separator: " ").count
+
+        var firstChunkTime: Date?
+        var completionTokenCount = 0
+
+        do {
+            for try await chunk in stream {
+                if firstChunkTime == nil {
+                    firstChunkTime = Date()
+                }
+
+                if let text = String(data: chunk.data, encoding: .utf8) {
+                    response += text
+                    completionTokenCount += 1
+                }
+            }
+        } catch {
+            if response.isEmpty {
+                response = "Error: \(error.localizedDescription)"
+            }
+        }
+
+        let totalLatencyMs = Date().timeIntervalSince(start) * 1000
+        let ttftMs = (firstChunkTime ?? Date()).timeIntervalSince(start) * 1000
+        let totalTokens = promptTokenCount + completionTokenCount
+        let tokensPerSecond: Double
+        if totalLatencyMs > 0, completionTokenCount > 0 {
+            tokensPerSecond = Double(completionTokenCount) / (totalLatencyMs / 1000.0)
+        } else {
+            tokensPerSecond = 0
+        }
+
+        lastInferenceMetrics = InferenceMetrics(
+            tokensPerSecond: tokensPerSecond,
+            ttftMs: ttftMs,
+            promptTokens: promptTokenCount,
+            completionTokens: completionTokenCount,
+            totalTokens: totalTokens,
+            totalLatencyMs: totalLatencyMs
+        )
+    }
+
+    /// Fallback single-shot inference using MLModel.prediction directly.
+    private func runSingleShotInference(prompt: String, start: Date) async {
+        // Without a compiled model URL, we cannot run inference
+        response = "Model not available for interactive inference. Re-run pairing to enable."
+
+        let totalLatencyMs = Date().timeIntervalSince(start) * 1000
+        let promptTokenCount = prompt.split(separator: " ").count
+
+        lastInferenceMetrics = InferenceMetrics(
+            tokensPerSecond: 0,
+            ttftMs: totalLatencyMs,
+            promptTokens: promptTokenCount,
+            completionTokens: 0,
+            totalTokens: promptTokenCount,
+            totalLatencyMs: totalLatencyMs
+        )
     }
 }
 
