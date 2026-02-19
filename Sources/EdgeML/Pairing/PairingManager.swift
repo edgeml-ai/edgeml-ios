@@ -377,9 +377,16 @@ public actor PairingManager {
         return sorted[index]
     }
 
-    /// Returns available memory in bytes using os_proc_available_memory if available.
+    /// Returns available memory in bytes.
+    ///
+    /// Uses `os_proc_available_memory()` on iOS/tvOS/watchOS.
+    /// Falls back to `ProcessInfo.physicalMemory` on macOS.
     private func availableMemoryBytes() -> Int {
+        #if os(iOS) || os(tvOS) || os(watchOS)
         return Int(os_proc_available_memory())
+        #else
+        return Int(ProcessInfo.processInfo.physicalMemory)
+        #endif
     }
 
     /// Returns current battery level as a Double (0.0 - 1.0), or nil if unavailable.
