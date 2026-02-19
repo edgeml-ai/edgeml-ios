@@ -159,7 +159,9 @@ final class InferenceEngineTests: XCTestCase {
     // MARK: - AudioEngine
 
     func testAudioEngineGeneratesChunks() async throws {
-        let engine = AudioEngine(modelPath: tempModelPath, durationSeconds: 0.5, sampleRate: 16000)
+        // 0.5 sec * 16000 / 1024 = ~7 frames
+        let totalFrames = Int(0.5 * Double(16000) / 1024)
+        let engine = AudioEngine(modelPath: tempModelPath, totalFrames: totalFrames, sampleRate: 16000)
         let stream = engine.generate(input: "audio input", modality: .audio)
 
         var count = 0
@@ -167,13 +169,11 @@ final class InferenceEngineTests: XCTestCase {
             count += 1
         }
 
-        // 0.5 sec * 16000 / 1024 = ~7 frames
-        let expectedFrames = Int(0.5 * Double(16000) / 1024)
-        XCTAssertEqual(count, expectedFrames)
+        XCTAssertEqual(count, totalFrames)
     }
 
     func testAudioEngineChunksHaveAudioModality() async throws {
-        let engine = AudioEngine(modelPath: tempModelPath, durationSeconds: 0.2, sampleRate: 16000)
+        let engine = AudioEngine(modelPath: tempModelPath, totalFrames: 3, sampleRate: 16000)
         let stream = engine.generate(input: "test", modality: .audio)
 
         for try await chunk in stream {
@@ -182,7 +182,7 @@ final class InferenceEngineTests: XCTestCase {
     }
 
     func testAudioEngineChunkDataSize() async throws {
-        let engine = AudioEngine(modelPath: tempModelPath, durationSeconds: 0.2, sampleRate: 16000)
+        let engine = AudioEngine(modelPath: tempModelPath, totalFrames: 3, sampleRate: 16000)
         let stream = engine.generate(input: "test", modality: .audio)
 
         for try await chunk in stream {
@@ -193,12 +193,12 @@ final class InferenceEngineTests: XCTestCase {
 
     func testAudioEngineDefaultConfiguration() {
         let engine = AudioEngine(modelPath: tempModelPath)
-        XCTAssertEqual(engine.durationSeconds, 5.0)
+        XCTAssertEqual(engine.totalFrames, 80)
         XCTAssertEqual(engine.sampleRate, 16000)
     }
 
     func testAudioEngineCancellation() async throws {
-        let engine = AudioEngine(modelPath: tempModelPath, durationSeconds: 5.0, sampleRate: 16000)
+        let engine = AudioEngine(modelPath: tempModelPath, totalFrames: 200, sampleRate: 16000)
         let stream = engine.generate(input: "test", modality: .audio)
 
         let task = Task {
