@@ -404,7 +404,7 @@ public struct PairingView: View {
         }
 
         // Extract server URL from the QR URL host if available
-        var serverURL = URL(string: "https://api.edgeml.ai")!
+        var serverURL = URL(string: "https://api.edgeml.io")!
         if let hostItem = components.queryItems?.first(where: { $0.name == "server" }),
            let serverString = hostItem.value,
            let parsedURL = URL(string: serverString) {
