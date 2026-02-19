@@ -153,6 +153,58 @@ public enum Deploy {
     }
 }
 
+// MARK: - Adaptive Deployment
+
+extension Deploy {
+
+    /// Deploy a model with runtime adaptation.
+    ///
+    /// The returned ``AdaptiveDeployedModel`` monitors device state (battery,
+    /// thermal pressure, memory, low-power mode) and automatically switches
+    /// compute units when conditions change. Uses the ``AdaptiveModelLoader``
+    /// fallback chain to load the model initially.
+    ///
+    /// - Parameters:
+    ///   - url: Path to the compiled model file (`.mlmodelc`).
+    ///   - stateMonitor: Optional pre-configured state monitor. A default monitor
+    ///     is created if nil.
+    ///   - configuration: SDK configuration.
+    /// - Returns: An ``AdaptiveDeployedModel`` that adapts at runtime.
+    /// - Throws: If the model cannot be loaded with any compute unit configuration.
+    public static func adaptiveModel(
+        from url: URL,
+        stateMonitor: DeviceStateMonitor? = nil,
+        configuration: EdgeMLConfiguration = .standard
+    ) async throws -> AdaptiveDeployedModel {
+        let monitor = stateMonitor ?? DeviceStateMonitor()
+        let loader = AdaptiveModelLoader()
+
+        // Get initial device state to pick the best starting compute units
+        await monitor.startMonitoring()
+        let initialState = await monitor.currentState
+        let recommendation = RuntimeAdapter.recommend(for: initialState)
+
+        // Load model with fallback chain starting from recommended compute units
+        let (mlModel, actualUnits) = try await loader.load(
+            from: url,
+            preferredComputeUnits: recommendation.computeUnits
+        )
+
+        let adaptive = AdaptiveDeployedModel(
+            model: mlModel,
+            modelURL: url,
+            computeUnits: actualUnits,
+            stateMonitor: monitor,
+            loader: loader
+        )
+
+        // Start the adaptation loop
+        await adaptive.startAdaptation()
+
+        return adaptive
+    }
+}
+
 /// Errors from the deploy API.
 public enum DeployError: Error, LocalizedError {
     case unsupportedFormat(String)

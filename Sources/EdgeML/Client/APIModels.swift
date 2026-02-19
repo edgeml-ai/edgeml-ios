@@ -1171,3 +1171,74 @@ public struct InferenceEventRequest: Codable, Sendable {
         self.orgId = try container.decodeIfPresent(String.self, forKey: .orgId)
     }
 }
+
+// MARK: - Runtime Adaptation
+
+/// Server-side recommendation for compute adaptation.
+///
+/// Returned by the adaptation endpoint when the device reports its current state.
+/// The server may have fleet-wide intelligence about which compute units work
+/// best for a given model/device combination.
+public struct AdaptationRecommendation: Codable, Sendable {
+    /// Recommended compute executor (e.g. "all", "cpuAndGPU", "cpuOnly").
+    public let recommendedExecutor: String
+    /// Recommended CoreML compute units string.
+    public let recommendedComputeUnits: String
+    /// Whether inference should be throttled.
+    public let throttleInference: Bool
+    /// Whether batch sizes should be reduced.
+    public let reduceBatchSize: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case recommendedExecutor = "recommended_executor"
+        case recommendedComputeUnits = "recommended_compute_units"
+        case throttleInference = "throttle_inference"
+        case reduceBatchSize = "reduce_batch_size"
+    }
+
+    public init(
+        recommendedExecutor: String,
+        recommendedComputeUnits: String,
+        throttleInference: Bool,
+        reduceBatchSize: Bool
+    ) {
+        self.recommendedExecutor = recommendedExecutor
+        self.recommendedComputeUnits = recommendedComputeUnits
+        self.throttleInference = throttleInference
+        self.reduceBatchSize = reduceBatchSize
+    }
+}
+
+/// Server-side fallback recommendation when a model format or executor fails.
+///
+/// The server tracks failure rates across the fleet and can recommend
+/// alternative formats or executors when one fails on a specific device.
+public struct FallbackRecommendation: Codable, Sendable {
+    /// Alternative model format to try (e.g. "coreml", "onnx").
+    public let fallbackFormat: String
+    /// Alternative executor to try (e.g. "cpuOnly").
+    public let fallbackExecutor: String
+    /// Pre-signed URL to download the fallback model variant.
+    public let downloadURL: String
+    /// Optional runtime configuration for the fallback.
+    public let runtimeConfig: [String: AnyCodable]?
+
+    enum CodingKeys: String, CodingKey {
+        case fallbackFormat = "fallback_format"
+        case fallbackExecutor = "fallback_executor"
+        case downloadURL = "download_url"
+        case runtimeConfig = "runtime_config"
+    }
+
+    public init(
+        fallbackFormat: String,
+        fallbackExecutor: String,
+        downloadURL: String,
+        runtimeConfig: [String: AnyCodable]? = nil
+    ) {
+        self.fallbackFormat = fallbackFormat
+        self.fallbackExecutor = fallbackExecutor
+        self.downloadURL = downloadURL
+        self.runtimeConfig = runtimeConfig
+    }
+}
