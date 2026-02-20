@@ -1,8 +1,5 @@
 #if canImport(SwiftUI)
 import SwiftUI
-#if canImport(PhotosUI)
-import PhotosUI
-#endif
 
 /// Classification UI that displays top-K label results with horizontal
 /// confidence bars.
@@ -15,6 +12,7 @@ struct ClassificationView: View {
 
     @ObservedObject var viewModel: TryItOutViewModel
     @State private var selectedImageData: Data?
+    @State private var showImagePicker = false
 
     var body: some View {
         ScrollView {
@@ -41,7 +39,7 @@ struct ClassificationView: View {
             if let imageData = selectedImageData {
                 selectedImagePreview(data: imageData)
             } else {
-                imagePickerPlaceholder
+                imagePickerButton
             }
         }
     }
@@ -73,76 +71,33 @@ struct ClassificationView: View {
         }
     }
 
-    private var imagePickerPlaceholder: some View {
-        Group {
-            if #available(iOS 16.0, *) {
-                #if canImport(PhotosUI)
-                classificationPhotosPickerButton
-                #else
-                classificationFallbackButton
-                #endif
-            } else {
-                classificationFallbackButton
-            }
-        }
-    }
-
-    #if canImport(PhotosUI)
-    @available(iOS 16.0, *)
-    private var classificationPhotosPickerButton: some View {
-        PhotosPicker(
-            selection: Binding(
-                get: { nil as PhotosPickerItem? },
-                set: { newItem in
-                    if let newItem {
-                        Task {
-                            if let data = try? await newItem.loadTransferable(type: Data.self) {
-                                await MainActor.run {
-                                    selectedImageData = data
-                                }
-                            }
-                        }
-                    }
-                }
-            ),
-            matching: .images
-        ) {
-            classificationPickerLabel
-        }
-    }
-    #endif
-
-    private var classificationFallbackButton: some View {
+    private var imagePickerButton: some View {
         Button {
-            // Fallback: in production, present UIImagePickerController
+            showImagePicker = true
         } label: {
-            classificationPickerLabel
-        }
-    }
+            VStack(spacing: 12) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 36))
+                    .foregroundColor(.white.opacity(0.3))
 
-    private var classificationPickerLabel: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "camera.viewfinder")
-                .font(.system(size: 36))
-                .foregroundColor(.white.opacity(0.3))
-
-            Text("Select an image to classify")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.5))
+                Text("Select an image to classify")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 140)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        style: StrokeStyle(lineWidth: 1, dash: [6])
+                    )
+                    .foregroundColor(.white.opacity(0.15))
+            )
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 140)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(
-                    style: StrokeStyle(lineWidth: 1, dash: [6])
-                )
-                .foregroundColor(.white.opacity(0.15))
-        )
     }
 
     // MARK: - Classify Button

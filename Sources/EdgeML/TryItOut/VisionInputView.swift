@@ -1,14 +1,11 @@
 #if canImport(SwiftUI)
 import SwiftUI
-#if canImport(PhotosUI)
-import PhotosUI
-#endif
 
 /// Vision input UI for image + optional prompt models.
 ///
-/// Provides a photo picker (via PhotosUI on iOS 16+, or a camera button
-/// fallback), an optional text prompt field, an "Analyze" button, and
-/// a response area displaying the model's output with latency.
+/// Provides a photo picker button, an optional text prompt field,
+/// an "Analyze" button, and a response area displaying the model's
+/// output with latency.
 @available(iOS 15.0, macOS 12.0, *)
 struct VisionInputView: View {
 
@@ -16,11 +13,6 @@ struct VisionInputView: View {
     @State private var promptText: String = ""
     @State private var selectedImageData: Data?
     @State private var showImagePicker = false
-
-    #if canImport(PhotosUI)
-    @available(iOS 16.0, *)
-    @State private var selectedPhoto: PhotosPickerItem?
-    #endif
 
     var body: some View {
         ScrollView {
@@ -50,7 +42,7 @@ struct VisionInputView: View {
             if let imageData = selectedImageData {
                 selectedImagePreview(data: imageData)
             } else {
-                imagePickerPlaceholder
+                imagePickerButton
             }
         }
     }
@@ -81,76 +73,33 @@ struct VisionInputView: View {
         }
     }
 
-    private var imagePickerPlaceholder: some View {
-        Group {
-            if #available(iOS 16.0, *) {
-                #if canImport(PhotosUI)
-                photosPickerButton
-                #else
-                fallbackPickerButton
-                #endif
-            } else {
-                fallbackPickerButton
-            }
-        }
-    }
-
-    #if canImport(PhotosUI)
-    @available(iOS 16.0, *)
-    private var photosPickerButton: some View {
-        PhotosPicker(
-            selection: Binding(
-                get: { nil as PhotosPickerItem? },
-                set: { newItem in
-                    if let newItem {
-                        Task {
-                            if let data = try? await newItem.loadTransferable(type: Data.self) {
-                                await MainActor.run {
-                                    selectedImageData = data
-                                }
-                            }
-                        }
-                    }
-                }
-            ),
-            matching: .images
-        ) {
-            pickerLabel
-        }
-    }
-    #endif
-
-    private var fallbackPickerButton: some View {
+    private var imagePickerButton: some View {
         Button {
             showImagePicker = true
         } label: {
-            pickerLabel
-        }
-    }
+            VStack(spacing: 12) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.system(size: 36))
+                    .foregroundColor(.white.opacity(0.3))
 
-    private var pickerLabel: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 36))
-                .foregroundColor(.white.opacity(0.3))
-
-            Text("Select an image")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.5))
+                Text("Select an image")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 160)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        style: StrokeStyle(lineWidth: 1, dash: [6])
+                    )
+                    .foregroundColor(.white.opacity(0.15))
+            )
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 160)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(
-                    style: StrokeStyle(lineWidth: 1, dash: [6])
-                )
-                .foregroundColor(.white.opacity(0.15))
-        )
     }
 
     // MARK: - Prompt Field
