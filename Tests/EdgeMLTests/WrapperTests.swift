@@ -45,7 +45,7 @@ final class WrapperConfigTests: XCTestCase {
 final class ContractValidationTests: XCTestCase {
 
     func testValidationPassesWhenAllFeaturesPresent() throws {
-        let contract = ServerModelContract(
+        let contract = WrappedModelContract(
             inputFeatureNames: ["x", "y"],
             outputFeatureNames: ["result"]
         )
@@ -55,7 +55,7 @@ final class ContractValidationTests: XCTestCase {
     }
 
     func testValidationPassesWithExtraFeatures() throws {
-        let contract = ServerModelContract(
+        let contract = WrappedModelContract(
             inputFeatureNames: ["x"],
             outputFeatureNames: ["result"]
         )
@@ -66,7 +66,7 @@ final class ContractValidationTests: XCTestCase {
     }
 
     func testValidationFailsWhenFeaturesMissing() {
-        let contract = ServerModelContract(
+        let contract = WrappedModelContract(
             inputFeatureNames: ["x", "y", "z"],
             outputFeatureNames: ["result"]
         )
@@ -75,8 +75,8 @@ final class ContractValidationTests: XCTestCase {
 
         do {
             try contract.validate(input: provider)
-            XCTFail("Expected ContractValidationError")
-        } catch let error as ContractValidationError {
+            XCTFail("Expected FeatureValidationError")
+        } catch let error as FeatureValidationError {
             XCTAssertTrue(error.missingFeatures.contains("y"))
             XCTAssertTrue(error.missingFeatures.contains("z"))
             XCTAssertEqual(error.missingFeatures.count, 2)
@@ -87,7 +87,7 @@ final class ContractValidationTests: XCTestCase {
     }
 
     func testValidationWithEmptyContract() throws {
-        let contract = ServerModelContract(
+        let contract = WrappedModelContract(
             inputFeatureNames: [],
             outputFeatureNames: []
         )
@@ -96,7 +96,7 @@ final class ContractValidationTests: XCTestCase {
     }
 
     func testContractVersionProperty() {
-        let contract = ServerModelContract(
+        let contract = WrappedModelContract(
             inputFeatureNames: ["x"],
             version: "1.2.3"
         )
@@ -276,7 +276,7 @@ final class EdgeMLWrappedModelTests: XCTestCase {
     }
 
     func testContractValidationSkippedWhenDisabled() throws {
-        let contract = ServerModelContract(
+        let contract = WrappedModelContract(
             inputFeatureNames: ["required_feature"],
             outputFeatureNames: []
         )
@@ -290,8 +290,8 @@ final class EdgeMLWrappedModelTests: XCTestCase {
         XCTAssertThrowsError(try contract.validate(input: provider))
     }
 
-    func testContractValidationErrorDescription() {
-        let error = ContractValidationError(
+    func testFeatureValidationErrorDescription() {
+        let error = FeatureValidationError(
             missingFeatures: Set(["age", "name"]),
             providedFeatures: Set(["id"]),
             expectedFeatures: Set(["age", "name", "id"])
@@ -329,8 +329,8 @@ final class EdgeMLWrappedModelTests: XCTestCase {
         // construct MLModel here, we verify the flag is read correctly.
     }
 
-    func testServerModelContractInit() {
-        let contract = ServerModelContract(
+    func testWrappedModelContractInit() {
+        let contract = WrappedModelContract(
             inputFeatureNames: ["a", "b", "c"],
             outputFeatureNames: ["out"],
             version: "2.0.1"
