@@ -39,25 +39,34 @@ struct EdgeMLPairingModifier: ViewModifier {
             .onOpenURL { url in
                 handleURL(url)
             }
+            #if os(iOS)
             .fullScreenCover(isPresented: $isPairing) {
-                if let token = pairingToken, let host = pairingHost {
-                    PairingScreen(
-                        token: token,
-                        host: host,
-                        onTryModel: { model in
-                            isPairing = false
-                            onTryModel?(model)
-                        },
-                        onOpenDashboard: {
-                            isPairing = false
-                            onOpenDashboard?()
-                        }
-                    )
-                    #if os(iOS)
-                    .statusBarHidden(false)
-                    #endif
-                }
+                pairingContent
             }
+            #else
+            .sheet(isPresented: $isPairing) {
+                pairingContent
+                    .frame(minWidth: 400, minHeight: 500)
+            }
+            #endif
+    }
+
+    @ViewBuilder
+    private var pairingContent: some View {
+        if let token = pairingToken, let host = pairingHost {
+            PairingScreen(
+                token: token,
+                host: host,
+                onTryModel: { model in
+                    isPairing = false
+                    onTryModel?(model)
+                },
+                onOpenDashboard: {
+                    isPairing = false
+                    onOpenDashboard?()
+                }
+            )
+        }
     }
 
     private func handleURL(_ url: URL) {
