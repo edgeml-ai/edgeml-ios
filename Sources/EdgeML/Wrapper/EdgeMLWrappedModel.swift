@@ -37,9 +37,9 @@ public final class EdgeMLWrappedModel: @unchecked Sendable {
     /// Active wrapper configuration.
     public let config: EdgeMLWrapperConfig
 
-    /// The server model contract, if one was fetched or set.
+    /// The wrapper model contract, if one was fetched or set.
     /// Used for input validation before prediction.
-    public internal(set) var serverContract: ServerModelContract?
+    public internal(set) var serverContract: WrappedModelContract?
 
     /// Telemetry queue for batched inference event reporting.
     public let telemetry: TelemetryQueue
@@ -69,7 +69,7 @@ public final class EdgeMLWrappedModel: @unchecked Sendable {
         modelId: String,
         config: EdgeMLWrapperConfig = .default,
         telemetry: TelemetryQueue? = nil,
-        serverContract: ServerModelContract? = nil
+        serverContract: WrappedModelContract? = nil
     ) {
         self.underlyingModel = model
         self.modelId = modelId
@@ -92,7 +92,7 @@ public final class EdgeMLWrappedModel: @unchecked Sendable {
     ///
     /// - Parameter input: An ``MLFeatureProvider`` with the input features.
     /// - Returns: The model's prediction output.
-    /// - Throws: ``ContractValidationError`` if validation is enabled and
+    /// - Throws: ``FeatureValidationError`` if validation is enabled and
     ///   the input doesn't match the contract, or any error from CoreML.
     public func prediction(from input: MLFeatureProvider) throws -> MLFeatureProvider {
         try validateIfNeeded(input)
@@ -217,15 +217,14 @@ public final class EdgeMLWrappedModel: @unchecked Sendable {
     }
 }
 
-// MARK: - Server Model Contract Validation Extension
+// MARK: - Wrapped Model Contract
 
-/// Describes the server-side model contract used for input validation.
+/// Describes the feature-name contract used for ``MLFeatureProvider`` input validation.
 ///
-/// This is a lightweight struct that mirrors the contract data returned
-/// by the EdgeML server.  Unlike ``ModelContract`` (which deals with
-/// raw float arrays), this validates ``MLFeatureProvider`` inputs by
-/// checking feature name presence.
-public struct ServerModelContract: Sendable {
+/// Unlike ``ServerModelContract`` (which validates raw float arrays against
+/// tensor shapes from the server), this validates ``MLFeatureProvider`` inputs
+/// by checking that all required feature names are present.
+public struct WrappedModelContract: Sendable {
 
     /// Expected input feature names.
     public let inputFeatureNames: Set<String>
@@ -250,12 +249,12 @@ public struct ServerModelContract: Sendable {
     /// features.
     ///
     /// - Parameter input: The feature provider to validate.
-    /// - Throws: ``ContractValidationError`` if required features are missing.
+    /// - Throws: ``FeatureValidationError`` if required features are missing.
     public func validate(input: MLFeatureProvider) throws {
         let provided = input.featureNames
         let missing = inputFeatureNames.subtracting(provided)
         guard missing.isEmpty else {
-            throw ContractValidationError(
+            throw FeatureValidationError(
                 missingFeatures: missing,
                 providedFeatures: provided,
                 expectedFeatures: inputFeatureNames
@@ -264,8 +263,8 @@ public struct ServerModelContract: Sendable {
     }
 }
 
-/// Error thrown when contract validation fails on an ``EdgeMLWrappedModel``.
-public struct ContractValidationError: LocalizedError, Sendable {
+/// Error thrown when feature-name validation fails on an ``EdgeMLWrappedModel``.
+public struct FeatureValidationError: LocalizedError, Sendable {
 
     /// Feature names required by the contract but absent in the input.
     public let missingFeatures: Set<String>

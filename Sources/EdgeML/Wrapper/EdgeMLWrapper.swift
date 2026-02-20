@@ -52,7 +52,7 @@ public enum EdgeML {
         // works out of the box even without a server-side contract.
         let inputNames = Set(model.modelDescription.inputDescriptionsByName.keys)
         let outputNames = Set(model.modelDescription.outputDescriptionsByName.keys)
-        let localContract = ServerModelContract(
+        let localContract = WrappedModelContract(
             inputFeatureNames: inputNames,
             outputFeatureNames: outputNames
         )
