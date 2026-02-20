@@ -7,7 +7,7 @@ struct ContentView: View {
     @StateObject private var viewModel = EdgeMLDemoViewModel()
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 // Registration Section
                 Section("Device Registration") {
