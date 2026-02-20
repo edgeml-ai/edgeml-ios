@@ -23,16 +23,22 @@ public struct PairingScreen: View {
     @StateObject private var viewModel: PairingViewModel
 
     /// Callback invoked when the user taps "Try it out" on the success screen.
+    /// When nil, the built-in ``TryItOutScreen`` is presented automatically.
     private let onTryModel: ((PairedModelInfo) -> Void)?
 
     /// Callback invoked when the user taps "Open Dashboard".
     private let onOpenDashboard: (() -> Void)?
 
+    /// Tracks whether the built-in TryItOutScreen is being presented.
+    @State private var showTryItOut = false
+    @State private var tryItOutModelInfo: PairedModelInfo?
+
     /// Creates a pairing screen.
     /// - Parameters:
     ///   - token: Pairing code from the deep link.
     ///   - host: Server URL from the deep link.
-    ///   - onTryModel: Called when the user taps "Try it out".
+    ///   - onTryModel: Called when the user taps "Try it out". When nil,
+    ///     the built-in ``TryItOutScreen`` is presented automatically.
     ///   - onOpenDashboard: Called when the user taps "Open Dashboard".
     public init(
         token: String,
@@ -77,6 +83,24 @@ public struct PairingScreen: View {
         .onAppear {
             viewModel.startPairing()
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showTryItOut) {
+            if let info = tryItOutModelInfo {
+                NavigationView {
+                    TryItOutScreen(modelInfo: info)
+                }
+            }
+        }
+        #else
+        .sheet(isPresented: $showTryItOut) {
+            if let info = tryItOutModelInfo {
+                NavigationView {
+                    TryItOutScreen(modelInfo: info)
+                        .frame(minWidth: 400, minHeight: 500)
+                }
+            }
+        }
+        #endif
     }
 
     // MARK: - Background
@@ -211,7 +235,12 @@ public struct PairingScreen: View {
 
                 VStack(spacing: 10) {
                     Button {
-                        onTryModel?(model)
+                        if let handler = onTryModel {
+                            handler(model)
+                        } else {
+                            tryItOutModelInfo = model
+                            showTryItOut = true
+                        }
                     } label: {
                         Text("Try it out")
                             .font(.subheadline)
