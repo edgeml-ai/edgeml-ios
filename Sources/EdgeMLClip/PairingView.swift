@@ -396,6 +396,20 @@ public struct PairingView: View {
     }
 
     private func handleURL(_ url: URL) {
+        // Try the edgeml:// deep link scheme first
+        if let action = DeepLinkHandler.parse(url: url) {
+            switch action {
+            case .pair(let token, let host):
+                let serverURL = host.flatMap(URL.init(string:))
+                    ?? URL(string: "https://api.edgeml.io")!
+                viewModel.startPairing(code: token, serverURL: serverURL)
+            case .unknown:
+                viewModel.state = .error("Unrecognized deep link: \(url.absoluteString)")
+            }
+            return
+        }
+
+        // Fall back to universal link format: https://...?code=X&server=Y
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let codeItem = components.queryItems?.first(where: { $0.name == "code" }),
               let code = codeItem.value else {
