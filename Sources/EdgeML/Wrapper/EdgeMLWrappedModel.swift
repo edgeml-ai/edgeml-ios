@@ -142,7 +142,7 @@ public final class EdgeMLWrappedModel: @unchecked Sendable {
     public func predictions(from batch: MLBatchProvider) throws -> MLBatchProvider {
         let start = CFAbsoluteTimeGetCurrent()
         do {
-            let result = try underlyingModel.predictions(from: batch)
+            let result = try underlyingModel.predictions(from: batch, options: MLPredictionOptions())
             let latencyMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             recordTelemetry(latencyMs: latencyMs, success: true)
             return result

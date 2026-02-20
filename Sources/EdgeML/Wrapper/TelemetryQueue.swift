@@ -200,10 +200,7 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     /// Sends all buffered events to the server and clears the buffer.
     internal func flush() async {
-        lock.lock()
-        let batch = buffer
-        buffer.removeAll()
-        lock.unlock()
+        let batch = drainBuffer()
 
         guard !batch.isEmpty else { return }
 
@@ -224,32 +221,37 @@ public final class TelemetryQueue: @unchecked Sendable {
 
         do {
             let encoder = JSONEncoder()
-            let payload: [String: Any] = [
-                "model_id": modelId,
-                "events": try encoder.encode(batch),
-            ]
-            // We need to use JSONSerialization for the mixed-type dict. Instead, wrap in Codable.
             request.httpBody = try encoder.encode(TelemetryBatchPayload(modelId: modelId, events: batch))
 
             let (_, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
                 logger.warning("Telemetry upload returned HTTP \(httpResponse.statusCode)")
-                // Re-queue on server error
-                lock.lock()
-                buffer.insert(contentsOf: batch, at: 0)
-                lock.unlock()
+                requeueEvents(batch)
             } else {
                 // Success -- remove persisted file if present
                 try? FileManager.default.removeItem(at: persistenceURL)
             }
         } catch {
             logger.warning("Telemetry upload failed: \(error.localizedDescription)")
-            // Re-queue on network error
-            lock.lock()
-            buffer.insert(contentsOf: batch, at: 0)
-            lock.unlock()
+            requeueEvents(batch)
         }
+    }
+
+    /// Atomically drains the buffer and returns the events.
+    private func drainBuffer() -> [InferenceTelemetryEvent] {
+        lock.lock()
+        let batch = buffer
+        buffer.removeAll()
+        lock.unlock()
+        return batch
+    }
+
+    /// Re-inserts events at the front of the buffer after a failed upload.
+    private func requeueEvents(_ events: [InferenceTelemetryEvent]) {
+        lock.lock()
+        buffer.insert(contentsOf: events, at: 0)
+        lock.unlock()
     }
 
     private func startFlushTimer() {
