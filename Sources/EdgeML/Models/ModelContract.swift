@@ -221,3 +221,149 @@ public struct ModelContractValidationError: LocalizedError, Sendable {
         "Input size mismatch: got \(actual) elements, expected \(inputDescription)"
     }
 }
+
+// MARK: - Server Model Contract
+
+/// Specification of a single tensor from the server's model contract.
+///
+/// Matches the server JSON format:
+/// ```json
+/// {"name": "input_0", "dtype": "float32", "shape": [null, 224, 224, 3], "description": null}
+/// ```
+/// A `nil` value in `shape` represents a dynamic dimension (e.g., batch size).
+public struct ServerTensorSpec: Codable, Sendable, Equatable {
+    /// Tensor name (e.g., "input_0").
+    public let name: String
+
+    /// Data type string (e.g., "float32", "int64").
+    public let dtype: String
+
+    /// Tensor shape. `nil` entries represent dynamic dimensions (e.g., batch size).
+    public let shape: [Int?]
+
+    /// Optional human-readable description of this tensor.
+    public let description: String?
+
+    public init(name: String, dtype: String, shape: [Int?], description: String? = nil) {
+        self.name = name
+        self.dtype = dtype
+        self.shape = shape
+        self.description = description
+    }
+
+    /// The product of all non-nil (fixed) dimensions in the shape.
+    ///
+    /// For a shape like `[nil, 224, 224, 3]`, this returns `224 * 224 * 3 = 150528`.
+    /// Returns `nil` if the shape is empty.
+    public var fixedElementCount: Int? {
+        guard !shape.isEmpty else { return nil }
+        return shape.compactMap { $0 }.reduce(1, *)
+    }
+}
+
+/// A model contract as returned by the server, describing expected input/output tensor specifications.
+///
+/// Use this to validate inference inputs before calling CoreML, catching shape mismatches
+/// early with descriptive error messages.
+///
+/// ```swift
+/// if let contract = model.serverContract {
+///     let result = contract.validateInput(myFloatArray)
+///     if case .failure(let error) = result {
+///         print("Bad input: \(error.localizedDescription)")
+///     }
+/// }
+/// ```
+public struct ServerModelContract: Codable, Sendable, Equatable {
+    /// Expected input tensor specifications.
+    public let inputs: [ServerTensorSpec]
+
+    /// Expected output tensor specifications.
+    public let outputs: [ServerTensorSpec]
+
+    public init(inputs: [ServerTensorSpec], outputs: [ServerTensorSpec]) {
+        self.inputs = inputs
+        self.outputs = outputs
+    }
+
+    /// Validates that a float array's element count is compatible with the first input tensor's shape.
+    ///
+    /// - Dynamic (`nil`) dimensions in the shape are excluded from the size calculation.
+    /// - If no inputs are defined, validation passes (nothing to check).
+    /// - Only the first input tensor is checked (single-input models).
+    ///
+    /// - Parameter input: The float array to validate.
+    /// - Returns: `.success` if compatible, `.failure` with a descriptive error otherwise.
+    public func validateInput(_ input: [Float]) -> Result<Void, ContractValidationError> {
+        guard let firstInput = inputs.first else {
+            // No input spec defined — nothing to validate against.
+            return .success(())
+        }
+
+        guard let expectedCount = firstInput.fixedElementCount, expectedCount > 0 else {
+            // All dimensions are dynamic or shape is empty — cannot validate.
+            return .success(())
+        }
+
+        let hasDynamic = firstInput.shape.contains(where: { $0 == nil })
+
+        if hasDynamic {
+            // With dynamic dimensions, the input count must be an exact multiple
+            // of the fixed element count (the dynamic dims act as a batch axis).
+            guard input.count > 0, input.count.isMultiple(of: expectedCount) else {
+                return .failure(ContractValidationError(
+                    tensorName: firstInput.name,
+                    expectedShape: firstInput.shape,
+                    expectedFixedCount: expectedCount,
+                    actualCount: input.count,
+                    hasDynamicDimensions: true
+                ))
+            }
+        } else {
+            // Fully static shape — exact match required.
+            guard input.count == expectedCount else {
+                return .failure(ContractValidationError(
+                    tensorName: firstInput.name,
+                    expectedShape: firstInput.shape,
+                    expectedFixedCount: expectedCount,
+                    actualCount: input.count,
+                    hasDynamicDimensions: false
+                ))
+            }
+        }
+
+        return .success(())
+    }
+}
+
+/// Error describing a mismatch between an input array and a server model contract.
+public struct ContractValidationError: LocalizedError, Sendable, Equatable {
+    /// Name of the tensor that failed validation.
+    public let tensorName: String
+
+    /// Expected tensor shape (with `nil` for dynamic dimensions).
+    public let expectedShape: [Int?]
+
+    /// Product of fixed (non-nil) dimensions.
+    public let expectedFixedCount: Int
+
+    /// Actual element count provided.
+    public let actualCount: Int
+
+    /// Whether the shape contains dynamic dimensions.
+    public let hasDynamicDimensions: Bool
+
+    public var errorDescription: String? {
+        let shapeStr = expectedShape.map { $0.map(String.init) ?? "?" }.joined(separator: ", ")
+        if hasDynamicDimensions {
+            return "Contract violation for '\(tensorName)': " +
+                "input has \(actualCount) elements which is not a multiple of " +
+                "the fixed dimensions product \(expectedFixedCount) " +
+                "(shape: [\(shapeStr)])"
+        } else {
+            return "Contract violation for '\(tensorName)': " +
+                "expected \(expectedFixedCount) elements (shape: [\(shapeStr)]), " +
+                "got \(actualCount)"
+        }
+    }
+}

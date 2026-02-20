@@ -333,6 +333,8 @@ public struct ModelMetadata: Codable, Sendable {
     public let inputSchema: [String: String]?
     /// Output schema.
     public let outputSchema: [String: String]?
+    /// Server-extracted model contract with input/output tensor specifications.
+    public let serverContract: ServerModelContract?
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
@@ -345,6 +347,7 @@ public struct ModelMetadata: Codable, Sendable {
         case description
         case inputSchema = "input_schema"
         case outputSchema = "output_schema"
+        case serverContract = "server_contract"
     }
 
     public init(
@@ -357,7 +360,8 @@ public struct ModelMetadata: Codable, Sendable {
         supportsTraining: Bool,
         description: String?,
         inputSchema: [String: String]?,
-        outputSchema: [String: String]?
+        outputSchema: [String: String]?,
+        serverContract: ServerModelContract? = nil
     ) {
         self.modelId = modelId
         self.version = version
@@ -369,6 +373,7 @@ public struct ModelMetadata: Codable, Sendable {
         self.description = description
         self.inputSchema = inputSchema
         self.outputSchema = outputSchema
+        self.serverContract = serverContract
     }
 }
 
@@ -382,6 +387,8 @@ public struct ModelVersionResponse: Codable, Sendable {
     public let description: String?
     public let createdAt: Date
     public let metrics: [String: AnyCodable]?
+    /// Server-extracted model contract with input/output tensor specifications.
+    public let modelContract: ServerModelContract?
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
@@ -392,6 +399,7 @@ public struct ModelVersionResponse: Codable, Sendable {
         case description
         case createdAt = "created_at"
         case metrics
+        case modelContract = "model_contract"
     }
 }
 
