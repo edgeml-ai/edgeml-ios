@@ -204,7 +204,8 @@ public actor APIClient {
             supportsTraining: true,
             description: response.description,
             inputSchema: nil,
-            outputSchema: nil
+            outputSchema: nil,
+            serverContract: response.modelContract
         )
     }
 

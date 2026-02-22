@@ -55,6 +55,12 @@ public final class EdgeMLModel: @unchecked Sendable {
         return descriptions
     }
 
+    /// Server-extracted model contract with input/output tensor specifications.
+    /// When present, `predict(floatInput:)` validates the input before running inference.
+    public var serverContract: ServerModelContract? {
+        return metadata.serverContract
+    }
+
     /// Optional MNN runtime configuration for the model.
     public var mnnConfig: [String: Any]? = nil
 
@@ -122,6 +128,31 @@ public final class EdgeMLModel: @unchecked Sendable {
     /// - Throws: Error if prediction fails.
     public func predict(inputs: [String: Any]) throws -> MLFeatureProvider {
         let featureProvider = try MLDictionaryFeatureProvider(dictionary: inputs)
+        return try mlModel.prediction(from: featureProvider)
+    }
+
+    /// Makes a prediction after validating the input against the server model contract.
+    ///
+    /// If a ``ServerModelContract`` is available on this model, the input's element count
+    /// is validated against the contract's first input tensor shape **before** CoreML
+    /// inference is invoked. This catches shape mismatches early with descriptive errors.
+    ///
+    /// If no server contract is available, this method delegates directly to CoreML
+    /// without any pre-flight validation (backwards compatible).
+    ///
+    /// - Parameters:
+    ///   - floatInput: The float array input data.
+    ///   - featureProvider: An `MLFeatureProvider` built from `floatInput` to pass to CoreML.
+    /// - Returns: Model prediction output.
+    /// - Throws: ``ContractValidationError`` if the input violates the contract,
+    ///           or a CoreML error if inference fails.
+    public func predict(floatInput: [Float], featureProvider: MLFeatureProvider) throws -> MLFeatureProvider {
+        if let contract = serverContract {
+            let result = contract.validateInput(floatInput)
+            if case .failure(let error) = result {
+                throw error
+            }
+        }
         return try mlModel.prediction(from: featureProvider)
     }
 
