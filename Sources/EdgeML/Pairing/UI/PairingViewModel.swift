@@ -59,6 +59,25 @@ public struct PairedModelInfo: Sendable {
     public let runtime: String
     /// Tokens per second from the benchmark, if available.
     public let tokensPerSecond: Double?
+    /// The model's modality (e.g. "text", "vision", "audio", "classification").
+    /// Used by ``TryItOutScreen`` to present the appropriate input UI.
+    public let modality: String?
+
+    public init(
+        name: String,
+        version: String,
+        sizeString: String,
+        runtime: String,
+        tokensPerSecond: Double?,
+        modality: String? = nil
+    ) {
+        self.name = name
+        self.version = version
+        self.sizeString = sizeString
+        self.runtime = runtime
+        self.tokensPerSecond = tokensPerSecond
+        self.modality = modality
+    }
 }
 
 /// Drives the pairing flow for ``PairingScreen``.
