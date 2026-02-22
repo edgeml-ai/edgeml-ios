@@ -33,6 +33,7 @@ public struct PairingScreen: View {
     @State private var showTryItOut = false
     @State private var tryItOutModelInfo: PairedModelInfo?
 
+
     /// Creates a pairing screen.
     /// - Parameters:
     ///   - token: Pairing code from the deep link.
