@@ -268,6 +268,112 @@ final class WeightExtractorSerializationTests: XCTestCase {
         }
     }
 
+    // MARK: - Gradient clipping boundary tests
+
+    /// Helper: computes L2 norm of an MLMultiArray.
+    private func l2Norm(_ array: MLMultiArray) -> Double {
+        var sum: Double = 0
+        for i in 0..<array.count {
+            let v = array[i].doubleValue
+            sum += v * v
+        }
+        return sqrt(sum)
+    }
+
+    /// Helper: clips delta in-place to maxGradientNorm if L2 norm exceeds it.
+    private func clipDelta(_ array: MLMultiArray, maxNorm: Double) throws -> MLMultiArray {
+        let norm = l2Norm(array)
+        if norm <= maxNorm {
+            return array // no clipping needed
+        }
+        let scale = maxNorm / norm
+        let clipped = try MLMultiArray(shape: array.shape, dataType: array.dataType)
+        for i in 0..<array.count {
+            clipped[i] = NSNumber(value: array[i].doubleValue * scale)
+        }
+        return clipped
+    }
+
+    func testGradientClippingDeltaAtExactThresholdNotClipped() throws {
+        let maxNorm = PrivacyConfiguration.standard.dpClippingNorm // 1.0
+
+        // Create a delta with L2 norm exactly at the threshold.
+        // Vector [1.0, 0.0] has L2 norm = 1.0 = maxNorm.
+        let delta = try makeArray([1.0, 0.0])
+        let norm = l2Norm(delta)
+        XCTAssertEqual(norm, maxNorm, accuracy: 1e-6,
+                       "Delta norm should exactly equal the clipping threshold")
+
+        let clipped = try clipDelta(delta, maxNorm: maxNorm)
+
+        // Should NOT be clipped (norm == maxNorm, not >)
+        XCTAssertEqual(clipped[0].floatValue, 1.0, accuracy: 1e-6,
+                       "Delta at exact threshold should not be clipped")
+        XCTAssertEqual(clipped[1].floatValue, 0.0, accuracy: 1e-6)
+    }
+
+    func testGradientClippingDeltaSlightlyAboveThresholdIsClipped() throws {
+        let maxNorm = PrivacyConfiguration.standard.dpClippingNorm // 1.0
+
+        // Create a delta with L2 norm slightly above the threshold.
+        // Vector [1.0, 0.1] has L2 norm = sqrt(1.01) ≈ 1.005
+        let delta = try makeArray([1.0, 0.1])
+        let norm = l2Norm(delta)
+        XCTAssertGreaterThan(norm, maxNorm,
+                             "Delta norm should exceed the clipping threshold")
+
+        let clipped = try clipDelta(delta, maxNorm: maxNorm)
+        let clippedNorm = l2Norm(clipped)
+
+        XCTAssertEqual(clippedNorm, maxNorm, accuracy: 1e-6,
+                       "Clipped delta norm should equal the clipping threshold")
+        // Values should be scaled down proportionally
+        XCTAssertLessThan(clipped[0].floatValue, 1.0,
+                          "Clipped value should be less than original")
+    }
+
+    func testGradientClippingDeltaWellBelowThresholdNotClipped() throws {
+        let maxNorm = PrivacyConfiguration.standard.dpClippingNorm // 1.0
+
+        // Small delta: [0.1, 0.1] has L2 norm ≈ 0.141
+        let delta = try makeArray([0.1, 0.1])
+        let norm = l2Norm(delta)
+        XCTAssertLessThan(norm, maxNorm,
+                          "Delta norm should be well below threshold")
+
+        let clipped = try clipDelta(delta, maxNorm: maxNorm)
+
+        // Should NOT be clipped
+        XCTAssertEqual(clipped[0].floatValue, 0.1, accuracy: 1e-6,
+                       "Small delta should not be clipped")
+        XCTAssertEqual(clipped[1].floatValue, 0.1, accuracy: 1e-6)
+    }
+
+    func testGradientClippingWithCustomNorm() throws {
+        let config = PrivacyConfiguration(
+            enableDifferentialPrivacy: true,
+            dpEpsilon: 0.5,
+            dpClippingNorm: 5.0
+        )
+
+        // Delta with L2 norm = sqrt(9+16) = 5.0 = maxNorm exactly
+        let delta = try makeArray([3.0, 4.0])
+        let norm = l2Norm(delta)
+        XCTAssertEqual(norm, config.dpClippingNorm, accuracy: 1e-6)
+
+        let clipped = try clipDelta(delta, maxNorm: config.dpClippingNorm)
+        XCTAssertEqual(clipped[0].floatValue, 3.0, accuracy: 1e-6,
+                       "At exact threshold, values should be preserved")
+        XCTAssertEqual(clipped[1].floatValue, 4.0, accuracy: 1e-6)
+
+        // Now slightly over: [3.0, 4.01]
+        let overDelta = try makeArray([3.0, 4.01])
+        let overClipped = try clipDelta(overDelta, maxNorm: config.dpClippingNorm)
+        let overNorm = l2Norm(overClipped)
+        XCTAssertEqual(overNorm, config.dpClippingNorm, accuracy: 1e-4,
+                       "Clipped norm should match the clipping threshold")
+    }
+
     // MARK: - Helpers
 
     private func makeArray(_ values: [Float]) throws -> MLMultiArray {

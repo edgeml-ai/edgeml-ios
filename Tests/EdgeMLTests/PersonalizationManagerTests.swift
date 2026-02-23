@@ -288,4 +288,53 @@ final class PersonalizationManagerTests: XCTestCase {
 
         XCTAssertNil(sample.metadata)
     }
+
+    // MARK: - Buffer eviction order
+
+    func testBufferEvictsOldestSamplesWhenExceedingMaxSize() async throws {
+        // bufferSize=5 => maxBufferSize=10
+        // minSamples set high to prevent auto-training from consuming the buffer
+        let manager = makeManager(bufferSize: 5, minSamples: 1000)
+
+        // Add 12 samples, each with a unique timestamp so we can reason about order.
+        // After adding all 12, buffer should be trimmed to maxBufferSize (10).
+        // The first 2 samples (oldest) should be evicted.
+        for i in 0..<12 {
+            let input = MockFeatureProvider(doubles: ["x": Double(i)])
+            let target = MockFeatureProvider(doubles: ["y": Double(i)])
+            try await manager.addTrainingSample(
+                input: input,
+                target: target,
+                metadata: ["index": i]
+            )
+        }
+
+        let stats = await manager.getStatistics()
+        // maxBufferSize = 5 * 2 = 10
+        XCTAssertLessThanOrEqual(stats.bufferedSamples, 10,
+            "Buffer should be trimmed to maxBufferSize")
+        XCTAssertEqual(stats.bufferedSamples, 10,
+            "Buffer should contain exactly maxBufferSize samples after eviction")
+    }
+
+    func testBufferEvictionPreservesNewestSamples() async throws {
+        // bufferSize=3 => maxBufferSize=6
+        let manager = makeManager(bufferSize: 3, minSamples: 1000)
+
+        // Add 8 samples. After each add that exceeds maxBufferSize,
+        // oldest are evicted. Final buffer should have samples 2..7 (indices 2-7).
+        for i in 0..<8 {
+            let input = MockFeatureProvider(doubles: ["x": Double(i)])
+            let target = MockFeatureProvider(doubles: ["y": Double(i)])
+            try await manager.addTrainingSample(
+                input: input,
+                target: target,
+                metadata: ["index": i]
+            )
+        }
+
+        let stats = await manager.getStatistics()
+        XCTAssertEqual(stats.bufferedSamples, 6,
+            "Buffer should be capped at maxBufferSize (3 * 2 = 6)")
+    }
 }
