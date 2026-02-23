@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>ai.octomil.pairing</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>octomil</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Octomil uses your local network to receive model deployments from your development machine.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_octomil._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Octomil uses the camera for vision model inference.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Octomil uses the microphone for audio model inference.</string>
+</dict>
+</plist>
