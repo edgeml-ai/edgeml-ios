@@ -257,6 +257,33 @@ final class StreamingInferenceTests: XCTestCase {
         }
     }
 
+    func testWrapperThroughputWithinExpectedRange() async throws {
+        // 5 chunks with 10ms delay each => total ~50ms => throughput ~100 chunks/sec
+        // Formula: throughput = chunks / (totalDurationMs / 1000)
+        let engine = MockStreamingEngine()
+        engine.chunks = (0..<5).map { MockStreamingEngine.ChunkSpec("c\($0)", delayMs: 10) }
+
+        let wrapper = InstrumentedStreamWrapper(modality: .text)
+        let (stream, getResult) = wrapper.wrap(engine, input: "throughput-test")
+
+        for try await _ in stream { /* drain stream */ }
+
+        let result = try XCTUnwrap(getResult())
+        XCTAssertEqual(result.totalChunks, 5)
+
+        // With 5 chunks and ~50ms total duration, throughput should be ~100 chunks/sec.
+        // Allow generous bounds for CI variability: 20-500 chunks/sec.
+        XCTAssertGreaterThan(result.throughput, 20.0,
+                             "Throughput should be > 20 chunks/sec for 5 chunks with 10ms delays")
+        XCTAssertLessThan(result.throughput, 500.0,
+                          "Throughput should be < 500 chunks/sec (sanity upper bound)")
+
+        // Verify the formula: throughput = totalChunks / (totalDurationMs / 1000)
+        let expectedThroughput = Double(result.totalChunks) / (result.totalDurationMs / 1000)
+        XCTAssertEqual(result.throughput, expectedThroughput, accuracy: 0.01,
+                       "Throughput should match chunks / (totalDurationMs / 1000)")
+    }
+
     func testWrapperAverageLatencyComputation() async throws {
         let engine = MockStreamingEngine()
         engine.chunks = [

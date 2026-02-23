@@ -205,6 +205,60 @@ final class RuntimeAdaptationTests: XCTestCase {
         XCTAssertEqual(rec.computeUnits, .all)
     }
 
+    func testBatteryJustBelowTenPercentIsCritical() {
+        // 0.099 is < 0.10, should trigger critical battery (CPU only)
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.099,
+            batteryState: .unplugged,
+            thermalState: .nominal,
+            availableMemoryMB: 2048,
+            isLowPowerMode: false
+        )
+
+        let rec = RuntimeAdapter.recommend(for: state)
+
+        XCTAssertEqual(rec.computeUnits, .cpuOnly,
+                       "Battery at 0.099 (< 0.10) should trigger CPU-only mode")
+        XCTAssertTrue(rec.reduceBatchSize,
+                      "Battery at 0.099 should reduce batch size")
+        XCTAssertEqual(rec.maxConcurrentInferences, 1,
+                       "Battery at 0.099 should limit to 1 concurrent inference")
+    }
+
+    func testBatteryJustBelowTwentyPercentUnpluggedIsCPUAndGPU() {
+        // 0.199 is < 0.20 and unplugged, should trigger battery conservation
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.199,
+            batteryState: .unplugged,
+            thermalState: .nominal,
+            availableMemoryMB: 2048,
+            isLowPowerMode: false
+        )
+
+        let rec = RuntimeAdapter.recommend(for: state)
+
+        XCTAssertEqual(rec.computeUnits, .cpuAndGPU,
+                       "Battery at 0.199 (< 0.20) unplugged should bypass Neural Engine")
+        XCTAssertEqual(rec.maxConcurrentInferences, 2,
+                       "Battery at 0.199 should limit to 2 concurrent inferences")
+    }
+
+    func testBatteryAtExactlyZeroIsCritical() {
+        // 0.0 is < 0.10, should trigger critical battery
+        let state = DeviceStateMonitor.DeviceState(
+            batteryLevel: 0.0,
+            batteryState: .unplugged,
+            thermalState: .nominal,
+            availableMemoryMB: 2048,
+            isLowPowerMode: false
+        )
+
+        let rec = RuntimeAdapter.recommend(for: state)
+
+        XCTAssertEqual(rec.computeUnits, .cpuOnly,
+                       "Battery at 0.0 should trigger CPU-only mode")
+    }
+
     func testUnknownBatteryLevelTreatedAsNominal() {
         // UIDevice returns -1.0 when battery monitoring is off
         let state = DeviceStateMonitor.DeviceState(

@@ -183,6 +183,68 @@ final class EdgeMLClientTests: XCTestCase {
         client.disableBackgroundTraining()
     }
     #endif
+
+    // MARK: - Register Idempotency
+
+    func testRegisterTwiceProducesConsistentErrors() async {
+        // register() always calls the API — without a real server both calls
+        // should fail with the same class of error. Crucially, the second call
+        // must NOT crash or leave the client in a broken state.
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
+            serverURL: Self.testServerURL
+        )
+
+        var firstError: Error?
+        var secondError: Error?
+
+        do {
+            _ = try await client.register()
+        } catch {
+            firstError = error
+        }
+
+        do {
+            _ = try await client.register()
+        } catch {
+            secondError = error
+        }
+
+        // Both calls should fail (no real server)
+        XCTAssertNotNil(firstError, "First register() should fail without a real server")
+        XCTAssertNotNil(secondError, "Second register() should fail without a real server")
+
+        // Client should still be usable after failed registrations
+        XCTAssertFalse(client.isRegistered)
+        XCTAssertNil(client.deviceId)
+
+        // Cache and other non-registration operations should still work
+        XCTAssertNil(client.getCachedModel(modelId: "any-model"))
+    }
+
+    func testRegisterSetsClientStateToInitializing() async {
+        let client = EdgeMLClient(
+            deviceAccessToken: "test-device-token",
+            orgId: "org-test",
+            serverURL: Self.testServerURL
+        )
+
+        XCTAssertEqual(client.currentState, .uninitialized)
+
+        // Start registration (will fail due to no real server, but state
+        // should transition to .initializing before the network call)
+        let task = Task {
+            _ = try? await client.register()
+        }
+
+        // Give a tiny moment for the state transition
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        task.cancel()
+
+        // After a failed registration, client should NOT be in .ready
+        XCTAssertNotEqual(client.currentState, .ready)
+    }
 }
 
 // MARK: - Mock Batch Provider

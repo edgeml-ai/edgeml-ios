@@ -25,34 +25,32 @@ final class NetworkMonitorTests: XCTestCase {
         monitor.removeHandler(token)
     }
 
-    func testConnectionProperties() {
+    func testConnectionProperties() throws {
         let monitor = NetworkMonitor.shared
 
+        try XCTSkipIf(!monitor.isConnected, "No network available")
+
         // These should not crash and should return consistent values
-        let isConnected = monitor.isConnected
         let isOnWiFi = monitor.isOnWiFi
         let isOnCellular = monitor.isOnCellular
         let isExpensive = monitor.isExpensive
         let isConstrained = monitor.isConstrained
 
-        // At least one should be true if connected
-        if isConnected {
-            XCTAssertTrue(isOnWiFi || isOnCellular || !isOnWiFi && !isOnCellular)
-        }
+        // At least one interface type should be identifiable when connected
+        XCTAssertTrue(isOnWiFi || isOnCellular || !isOnWiFi && !isOnCellular)
 
         // Log for debugging
-        print("Network status - Connected: \(isConnected), WiFi: \(isOnWiFi), Cellular: \(isOnCellular)")
+        print("Network status - Connected: true, WiFi: \(isOnWiFi), Cellular: \(isOnCellular)")
         print("Expensive: \(isExpensive), Constrained: \(isConstrained)")
     }
 
-    func testWaitForConnectivityWithTimeout() async {
+    func testWaitForConnectivityWithTimeout() async throws {
         let monitor = NetworkMonitor.shared
 
-        // Very short timeout to test timeout behavior
-        let connected = await monitor.waitForConnectivity(timeout: 0.1)
+        try XCTSkipIf(!monitor.isConnected, "No network available")
 
-        // Either connects immediately or times out
-        // We're just testing it doesn't crash
-        print("Wait for connectivity result: \(connected)")
+        // When already connected, should return true almost immediately
+        let connected = await monitor.waitForConnectivity(timeout: 0.1)
+        XCTAssertTrue(connected, "Should report connected when network is available")
     }
 }

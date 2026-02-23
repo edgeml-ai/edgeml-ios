@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Combine
 import XCTest
 @testable import EdgeML
 
@@ -341,10 +342,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testTextInferenceCompletesWithResponse() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+
+        let expectation = expectation(description: "Text inference completes")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst() // skip the initial .idle
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.sendTextPrompt("Hello")
 
-        // Wait for the simulated inference to complete
-        try? await Task.sleep(nanoseconds: 800_000_000)
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         XCTAssertEqual(vm.messages.count, 2)
         XCTAssertTrue(vm.messages[0].isUser)
@@ -368,9 +381,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testVisionInferenceCompletes() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "vision"))
+
+        let expectation = expectation(description: "Vision inference completes")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst()
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.analyzeImage(imageData: Data([0xFF]), prompt: "describe")
 
-        try? await Task.sleep(nanoseconds: 1_100_000_000)
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         if case .result(let output, let latency) = vm.inferenceState {
             XCTAssertFalse(output.isEmpty)
@@ -402,9 +428,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testClassificationInferenceCompletes() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+
+        let expectation = expectation(description: "Classification inference completes")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst()
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.classifyImage(imageData: Data([0xFF]))
 
-        try? await Task.sleep(nanoseconds: 600_000_000)
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         XCTAssertFalse(vm.classificationResults.isEmpty)
         XCTAssertNotNil(vm.lastLatencyMs)
@@ -433,9 +472,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testAudioInferenceCompletes() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "audio"))
+
+        let expectation = expectation(description: "Audio inference completes")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst()
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.transcribeAudio(audioData: Data([0x00]))
 
-        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         if case .result(let output, let latency) = vm.inferenceState {
             XCTAssertFalse(output.isEmpty)
@@ -449,8 +501,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testResetClearsMessages() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+
+        let expectation = expectation(description: "Inference completes before reset")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst()
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.sendTextPrompt("test")
-        try? await Task.sleep(nanoseconds: 800_000_000)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         XCTAssertFalse(vm.messages.isEmpty)
 
@@ -461,8 +527,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testResetClearsClassificationResults() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "classification"))
+
+        let expectation = expectation(description: "Classification completes before reset")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst()
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.classifyImage(imageData: Data([0xFF]))
-        try? await Task.sleep(nanoseconds: 600_000_000)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         XCTAssertFalse(vm.classificationResults.isEmpty)
 
@@ -486,8 +566,22 @@ final class TryItOutViewModelTests: XCTestCase {
 
     func testResetClearsLatency() async {
         let vm = TryItOutViewModel(modelInfo: makeModelInfo(modality: "text"))
+
+        let expectation = expectation(description: "Inference completes before reset")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$inferenceState
+            .dropFirst()
+            .sink { state in
+                if case .result = state {
+                    expectation.fulfill()
+                }
+            }
+
         vm.sendTextPrompt("test")
-        try? await Task.sleep(nanoseconds: 800_000_000)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
 
         XCTAssertNotNil(vm.lastLatencyMs)
 
