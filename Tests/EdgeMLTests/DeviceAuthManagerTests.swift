@@ -51,8 +51,9 @@ final class DeviceAuthManagerTests: XCTestCase {
         do {
             _ = try await manager.getAccessToken()
             XCTFail("Expected no token state after revoke")
-        } catch {
-            XCTAssertTrue(true)
+        } catch let error as NSError {
+            XCTAssertEqual(error.domain, "EdgeML.DeviceAuth",
+                           "Expected EdgeML.DeviceAuth error after revoke, got: \(error)")
         }
     }
 
@@ -155,8 +156,11 @@ final class DeviceAuthManagerTests: XCTestCase {
         do {
             _ = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
             XCTFail("Expected refresh failure to surface for expired token")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .cannotConnectToHost,
+                           "Expected cannotConnectToHost error, got: \(error)")
         } catch {
-            XCTAssertTrue(true)
+            XCTFail("Expected URLError, got \(type(of: error)): \(error)")
         }
     }
 
@@ -196,8 +200,11 @@ final class DeviceAuthManagerTests: XCTestCase {
         do {
             try await manager.revoke()
             XCTFail("Expected revoke failure")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .cannotConnectToHost,
+                           "Expected cannotConnectToHost error, got: \(error)")
         } catch {
-            XCTAssertTrue(true)
+            XCTFail("Expected URLError, got \(type(of: error)): \(error)")
         }
 
         let token = try await manager.getAccessToken(refreshIfExpiringWithin: 30)
