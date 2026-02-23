@@ -7,8 +7,8 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/octomil/octomil-ios/badge)](https://scorecard.dev/viewer/?uri=github.com/octomil/octomil-ios)
 [![CodeQL](https://github.com/octomil/octomil-ios/actions/workflows/codeql.yml/badge.svg)](https://github.com/octomil/octomil-ios/actions/workflows/codeql.yml)
 [![CII Best Practices](https://www.bestpractices.dev/projects/11913/badge)](https://www.bestpractices.dev/projects/11913)
-[![Swift Version](https://img.shields.io/badge/Swift-5.5%2B-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/octomil/octomil-ios)
+[![Swift Version](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org)
+[![Platform](https://img.shields.io/badge/platform-iOS%2015.0%2B-lightgrey.svg)](https://github.com/octomil/octomil-ios)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > Enterprise-grade iOS SDK for privacy-preserving federated learning on Apple devices.
@@ -39,9 +39,9 @@ The Octomil iOS SDK brings production-ready federated learning to iPhone and iPa
 
 ## Requirements
 
-- iOS 13.0+ / iPadOS 13.0+
-- Xcode 13.0+
-- Swift 5.5+
+- iOS 15.0+ / iPadOS 15.0+
+- Xcode 15.0+
+- Swift 5.9+
 
 ## Installation
 
@@ -53,11 +53,9 @@ dependencies: [
 ]
 ```
 
-### CocoaPods
+### CocoaPods (Coming Soon)
 
-```ruby
-pod 'Octomil', '~> 1.0'
-```
+CocoaPods support is planned for a future release. For now, use Swift Package Manager.
 
 ## Quick Start
 
