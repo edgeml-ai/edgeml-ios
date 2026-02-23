@@ -154,8 +154,9 @@ final class PairingViewModelTests: XCTestCase {
     }
 
     func testInvalidHostProducesError() async {
-        // A host with invalid characters should produce an error state
-        let vm = PairingViewModel(token: "TEST", host: "")
+        // Use a host with spaces so URL(string:) returns nil and the guard
+        // in runPairingFlow fires immediately — no network call needed.
+        let vm = PairingViewModel(token: "TEST", host: "not a valid url")
 
         let expectation = expectation(description: "State transitions to error")
         var cancellable: AnyCancellable?
@@ -164,12 +165,10 @@ final class PairingViewModelTests: XCTestCase {
             .dropFirst() // skip the initial .connecting value
             .sink { state in
                 if case .error(let message) = state {
-                    XCTAssertTrue(message.contains("Invalid server URL") || message.contains("error"),
+                    XCTAssertTrue(message.contains("Invalid server URL"),
                                   "Unexpected error message: \(message)")
                     expectation.fulfill()
                 }
-                // The flow may also fail with a network error since "" is not a valid URL
-                // that's still an acceptable outcome - the important thing is it doesn't crash
             }
 
         vm.startPairing()
