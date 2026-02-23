@@ -1,11 +1,11 @@
-# Publishing the EdgeML iOS SDK
+# Publishing the Octomil iOS SDK
 
-This guide explains how to publish the EdgeML iOS SDK for distribution.
+This guide explains how to publish the Octomil iOS SDK for distribution.
 
 ## Quick Links
 
 - **PR**: https://github.com/sbangalore/fed-learning/pull/new/feat/ios-weight-extraction
-- **Docs**: `edgeml-ios/Docs/WEIGHT_EXTRACTION.md`
+- **Docs**: `octomil-ios/Docs/WEIGHT_EXTRACTION.md`
 
 ## Changes Summary
 
@@ -41,10 +41,10 @@ git push origin v1.1.0
 
 1. Go to https://github.com/sbangalore/fed-learning/releases/new
 2. Choose tag: `v1.1.0`
-3. Release title: "EdgeML iOS SDK v1.1.0 - Weight Extraction"
+3. Release title: "Octomil iOS SDK v1.1.0 - Weight Extraction"
 4. Description:
 ```markdown
-## EdgeML iOS SDK v1.1.0
+## Octomil iOS SDK v1.1.0
 
 ### New Features
 - ✨ CoreML weight/delta extraction for federated learning
@@ -69,7 +69,7 @@ try await client.uploadWeights(update)
 ```
 
 ### Documentation
-- [Weight Extraction Guide](edgeml-ios/Docs/WEIGHT_EXTRACTION.md)
+- [Weight Extraction Guide](octomil-ios/Docs/WEIGHT_EXTRACTION.md)
 - [API Documentation](#)
 
 ### Breaking Changes
@@ -99,7 +99,7 @@ targets: [
     .target(
         name: "MyApp",
         dependencies: [
-            .product(name: "EdgeML", package: "fed-learning")
+            .product(name: "Octomil", package: "fed-learning")
         ]
     )
 ]
@@ -117,21 +117,21 @@ Or in Xcode:
 
 #### Step 1: Create Podspec
 
-Create `EdgeML.podspec` in repo root:
+Create `Octomil.podspec` in repo root:
 
 ```ruby
 Pod::Spec.new do |s|
-  s.name             = 'EdgeML'
+  s.name             = 'Octomil'
   s.version          = '1.1.0'
   s.summary          = 'Federated learning SDK for iOS'
   s.description      = <<-DESC
-    EdgeML enables on-device federated learning with CoreML models.
+    Octomil enables on-device federated learning with CoreML models.
     Features weight extraction, delta computation, and automatic aggregation.
   DESC
 
   s.homepage         = 'https://github.com/sbangalore/fed-learning'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
-  s.author           = { 'EdgeML' => 'team@edgeml.ai' }
+  s.author           = { 'Octomil' => 'team@octomil.com' }
   s.source           = {
     :git => 'https://github.com/sbangalore/fed-learning.git',
     :tag => s.version.to_s
@@ -140,8 +140,8 @@ Pod::Spec.new do |s|
   s.ios.deployment_target = '15.0'
   s.swift_version = '5.7'
 
-  s.source_files = 'edgeml-ios/Sources/EdgeML/**/*.swift'
-  s.resources = 'edgeml-ios/Sources/EdgeML/**/*.{xcassets,strings}'
+  s.source_files = 'octomil-ios/Sources/Octomil/**/*.swift'
+  s.resources = 'octomil-ios/Sources/Octomil/**/*.{xcassets,strings}'
 
   s.frameworks = 'Foundation', 'CoreML', 'Combine'
 end
@@ -151,13 +151,13 @@ end
 
 ```bash
 # Validate
-pod lib lint EdgeML.podspec
+pod lib lint Octomil.podspec
 
 # Register (first time only)
-pod trunk register team@edgeml.ai 'EdgeML Team'
+pod trunk register team@octomil.com 'Octomil Team'
 
 # Publish
-pod trunk push EdgeML.podspec
+pod trunk push Octomil.podspec
 ```
 
 #### Step 3: Developers Install
@@ -165,7 +165,7 @@ pod trunk push EdgeML.podspec
 Add to `Podfile`:
 
 ```ruby
-pod 'EdgeML', '~> 1.1'
+pod 'Octomil', '~> 1.1'
 ```
 
 ---
@@ -177,15 +177,15 @@ Build a universal binary for manual integration.
 #### Step 1: Build XCFramework
 
 ```bash
-cd edgeml-ios
+cd octomil-ios
 
 # Clean
 rm -rf build/
-rm -f EdgeML.xcframework.zip
+rm -f Octomil.xcframework.zip
 
 # Build for iOS devices
 xcodebuild archive \
-  -scheme EdgeML \
+  -scheme Octomil \
   -destination "generic/platform=iOS" \
   -archivePath "build/ios" \
   SKIP_INSTALL=NO \
@@ -193,7 +193,7 @@ xcodebuild archive \
 
 # Build for iOS Simulator
 xcodebuild archive \
-  -scheme EdgeML \
+  -scheme Octomil \
   -destination "generic/platform=iOS Simulator" \
   -archivePath "build/ios-simulator" \
   SKIP_INSTALL=NO \
@@ -201,7 +201,7 @@ xcodebuild archive \
 
 # Build for macOS (if supported)
 xcodebuild archive \
-  -scheme EdgeML \
+  -scheme Octomil \
   -destination "generic/platform=macOS" \
   -archivePath "build/macos" \
   SKIP_INSTALL=NO \
@@ -209,26 +209,26 @@ xcodebuild archive \
 
 # Create XCFramework
 xcodebuild -create-xcframework \
-  -framework build/ios.xcarchive/Products/Library/Frameworks/EdgeML.framework \
-  -framework build/ios-simulator.xcarchive/Products/Library/Frameworks/EdgeML.framework \
-  -framework build/macos.xcarchive/Products/Library/Frameworks/EdgeML.framework \
-  -output EdgeML.xcframework
+  -framework build/ios.xcarchive/Products/Library/Frameworks/Octomil.framework \
+  -framework build/ios-simulator.xcarchive/Products/Library/Frameworks/Octomil.framework \
+  -framework build/macos.xcarchive/Products/Library/Frameworks/Octomil.framework \
+  -output Octomil.xcframework
 
 # Zip for distribution
-zip -r EdgeML.xcframework.zip EdgeML.xcframework
+zip -r Octomil.xcframework.zip Octomil.xcframework
 
 # Generate checksum
-shasum -a 256 EdgeML.xcframework.zip
+shasum -a 256 Octomil.xcframework.zip
 ```
 
 #### Step 2: Attach to GitHub Release
 
-1. Upload `EdgeML.xcframework.zip` to GitHub release
+1. Upload `Octomil.xcframework.zip` to GitHub release
 2. Add checksum to release notes:
 ```markdown
 ### Manual Installation
 
-Download [EdgeML.xcframework.zip](link-to-release)
+Download [Octomil.xcframework.zip](link-to-release)
 
 **Checksum (SHA-256):**
 ```
@@ -237,7 +237,7 @@ abc123...xyz789
 
 **Installation:**
 1. Download and unzip
-2. Drag EdgeML.xcframework into Xcode project
+2. Drag Octomil.xcframework into Xcode project
 3. Embed & Sign in target settings
 ```
 
@@ -250,7 +250,7 @@ If you have a demo app that uses the SDK:
 #### Step 1: Create Xcode Cloud Workflow
 
 1. Xcode → Product → Xcode Cloud → Create Workflow
-2. Select "EdgeML Demo" app target
+2. Select "Octomil Demo" app target
 3. Configure:
    - **Trigger**: On tag push matching `demo/v*`
    - **Actions**: Archive for TestFlight
@@ -282,7 +282,7 @@ git push origin demo/v1.0.1
 - [ ] CHANGELOG.md updated
 - [ ] Version bumped in:
   - [ ] Package.swift
-  - [ ] EdgeML.podspec (if using CocoaPods)
+  - [ ] Octomil.podspec (if using CocoaPods)
   - [ ] Info.plist (if applicable)
 
 ### Release
@@ -338,7 +338,7 @@ let package = Package(
         .executableTarget(
             name: "test-spm",
             dependencies: [
-                .product(name: "EdgeML", package: "fed-learning")
+                .product(name: "Octomil", package: "fed-learning")
             ]
         )
     ]
@@ -353,12 +353,12 @@ swift build
 
 ```bash
 # Unzip
-unzip EdgeML.xcframework.zip
+unzip Octomil.xcframework.zip
 
 # Create test Xcode project
 open -a Xcode
 
-# Drag EdgeML.xcframework into project
+# Drag Octomil.xcframework into project
 # Build and verify no errors
 ```
 
@@ -372,7 +372,7 @@ If the release has critical bugs:
 
 ```bash
 # Deprecate version
-pod trunk deprecate EdgeML 1.1.0 \
+pod trunk deprecate Octomil 1.1.0 \
   --in-favor-of=1.0.9 \
   --message="Critical bug, use 1.0.9 instead"
 ```
@@ -432,4 +432,4 @@ After this release (v1.1.0), consider:
 
 - **Issues**: https://github.com/sbangalore/fed-learning/issues
 - **Discussions**: https://github.com/sbangalore/fed-learning/discussions
-- **Email**: team@edgeml.ai (if applicable)
+- **Email**: team@octomil.com (if applicable)

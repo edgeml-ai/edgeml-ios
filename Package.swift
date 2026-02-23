@@ -4,37 +4,37 @@
 import PackageDescription
 
 let package = Package(
-    name: "EdgeML",
+    name: "Octomil",
     platforms: [
         .iOS(.v15),
         .macOS(.v11)
     ],
     products: [
         .library(
-            name: "EdgeML",
-            targets: ["EdgeML"]
+            name: "Octomil",
+            targets: ["Octomil"]
         ),
         .library(
-            name: "EdgeMLClip",
-            targets: ["EdgeMLClip"]
+            name: "OctomilClip",
+            targets: ["OctomilClip"]
         ),
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "EdgeML",
+            name: "Octomil",
             dependencies: [],
-            path: "Sources/EdgeML"
+            path: "Sources/Octomil"
         ),
         .target(
-            name: "EdgeMLClip",
-            dependencies: ["EdgeML"],
-            path: "Sources/EdgeMLClip"
+            name: "OctomilClip",
+            dependencies: ["Octomil"],
+            path: "Sources/OctomilClip"
         ),
         .testTarget(
-            name: "EdgeMLTests",
-            dependencies: ["EdgeML"],
-            path: "Tests/EdgeMLTests"
+            name: "OctomilTests",
+            dependencies: ["Octomil"],
+            path: "Tests/OctomilTests"
         ),
     ]
 )

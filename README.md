@@ -1,21 +1,21 @@
-# EdgeML iOS SDK
+# Octomil iOS SDK
 
-[![CI](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/edgeml-ai/edgeml-ios/branch/main/graph/badge.svg)](https://codecov.io/gh/edgeml-ai/edgeml-ios)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=edgeml-ai_edgeml-ios&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=edgeml-ai_edgeml-ios)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/edgeml-ai/edgeml-ios/badge)](https://scorecard.dev/viewer/?uri=github.com/edgeml-ai/edgeml-ios)
-[![CodeQL](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/codeql.yml/badge.svg)](https://github.com/edgeml-ai/edgeml-ios/actions/workflows/codeql.yml)
+[![CI](https://github.com/octomil/octomil-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/octomil/octomil-ios/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/octomil/octomil-ios/branch/main/graph/badge.svg)](https://codecov.io/gh/octomil/octomil-ios)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=octomil_octomil-ios&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=octomil_octomil-ios)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=octomil_octomil-ios&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=octomil_octomil-ios)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/octomil/octomil-ios/badge)](https://scorecard.dev/viewer/?uri=github.com/octomil/octomil-ios)
+[![CodeQL](https://github.com/octomil/octomil-ios/actions/workflows/codeql.yml/badge.svg)](https://github.com/octomil/octomil-ios/actions/workflows/codeql.yml)
 [![CII Best Practices](https://www.bestpractices.dev/projects/11913/badge)](https://www.bestpractices.dev/projects/11913)
 [![Swift Version](https://img.shields.io/badge/Swift-5.5%2B-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/edgeml-ai/edgeml-ios)
+[![Platform](https://img.shields.io/badge/platform-iOS%2013.0%2B-lightgrey.svg)](https://github.com/octomil/octomil-ios)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > Enterprise-grade iOS SDK for privacy-preserving federated learning on Apple devices.
 
 ## Overview
 
-The EdgeML iOS SDK brings production-ready federated learning to iPhone and iPad. Designed with Apple's privacy principles in mind, it enables on-device training while maintaining complete data sovereignty.
+The Octomil iOS SDK brings production-ready federated learning to iPhone and iPad. Designed with Apple's privacy principles in mind, it enables on-device training while maintaining complete data sovereignty.
 
 ### Key Features
 
@@ -49,14 +49,14 @@ The EdgeML iOS SDK brings production-ready federated learning to iPhone and iPad
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/edgeml-ai/edgeml-ios.git", from: "1.0.0")
+    .package(url: "https://github.com/octomil/octomil-ios.git", from: "1.0.0")
 ]
 ```
 
 ### CocoaPods
 
 ```ruby
-pod 'EdgeML', '~> 1.0'
+pod 'Octomil', '~> 1.0'
 ```
 
 ## Quick Start
@@ -66,7 +66,7 @@ pod 'EdgeML', '~> 1.0'
 Deploy and benchmark CoreML models locally. No server, no auth, no registration needed:
 
 ```swift
-import EdgeML
+import Octomil
 
 // Deploy a model — auto-benchmarks Neural Engine vs CPU, picks fastest
 let model = try Deploy.model(
@@ -90,12 +90,12 @@ let model = try Deploy.model(
 )
 ```
 
-When you're ready to connect to the EdgeML platform, initialize with your API key and the SDK automatically starts reporting metrics.
+When you're ready to connect to the Octomil platform, initialize with your API key and the SDK automatically starts reporting metrics.
 
 ### Basic Device Registration
 
 ```swift
-import EdgeML
+import Octomil
 
 // Collect device information
 let device = DeviceInfo()
@@ -114,15 +114,15 @@ print("Network: \(metadata["network_type"] ?? "unknown")")
 
 ```swift
 import Foundation
-import EdgeML
+import Octomil
 
-class EdgeMLClient {
+class OctomilClient {
     private let baseURL: String
     private let apiKey: String
     private let device = DeviceInfo()
     private var deviceServerId: String?
 
-    init(apiKey: String, baseURL: String = "https://api.edgeml.io") {
+    init(apiKey: String, baseURL: String = "https://api.octomil.com") {
         self.apiKey = apiKey
         self.baseURL = baseURL
     }
@@ -148,7 +148,7 @@ class EdgeMLClient {
 
     func sendHeartbeat() async throws {
         guard let deviceId = deviceServerId else {
-            throw NSError(domain: "EdgeML", code: -1, userInfo: [
+            throw NSError(domain: "Octomil", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Device not registered"
             ])
         }
@@ -167,7 +167,7 @@ class EdgeMLClient {
 }
 
 // Usage
-let client = EdgeMLClient(apiKey: "edg_your_key_here")
+let client = OctomilClient(apiKey: "edg_your_key_here")
 Task {
     let deviceId = try await client.register(orgId: "your_org_id")
     print("Registered with ID: \(deviceId)")
@@ -205,7 +205,7 @@ import BackgroundTasks
 
 class HeartbeatManager {
     static let shared = HeartbeatManager()
-    private let client: EdgeMLClient
+    private let client: OctomilClient
 
     func scheduleHeartbeat() {
         let request = BGAppRefreshTaskRequest(identifier: "com.yourapp.heartbeat")
@@ -269,13 +269,13 @@ swift test
 swift test --enable-code-coverage
 
 # Generate coverage report
-xcrun llvm-cov show .build/debug/EdgeMLPackageTests.xctest/Contents/MacOS/EdgeMLPackageTests \
+xcrun llvm-cov show .build/debug/OctomilPackageTests.xctest/Contents/MacOS/OctomilPackageTests \
     -instr-profile .build/debug/codecov/default.profdata
 ```
 
 ## Documentation
 
-For full SDK documentation, see [https://docs.edgeml.io/sdks/ios](https://docs.edgeml.io/sdks/ios)
+For full SDK documentation, see [https://docs.octomil.com/sdks/ios](https://docs.octomil.com/sdks/ios)
 
 ## Contributing
 
@@ -285,8 +285,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ```bash
 # Clone repository
-git clone https://github.com/edgeml-ai/edgeml-ios.git
-cd edgeml-ios
+git clone https://github.com/octomil/octomil-ios.git
+cd octomil-ios
 
 # Open in Xcode
 open Package.swift
@@ -353,12 +353,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For issues and feature requests, please use the [GitHub issue tracker](https://github.com/edgeml-ai/edgeml-ios/issues).
+For issues and feature requests, please use the [GitHub issue tracker](https://github.com/octomil/octomil-ios/issues).
 
-For questions: support@edgeml.io
+For questions: support@octomil.com
 
 ---
 
 <p align="center">
-  <strong>Built with ❤️ by the EdgeML Team</strong>
+  <strong>Built with ❤️ by the Octomil Team</strong>
 </p>

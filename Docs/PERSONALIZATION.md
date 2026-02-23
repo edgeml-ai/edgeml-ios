@@ -1,6 +1,6 @@
 # On-Device Personalization for iOS
 
-This guide explains how to implement continuous on-device personalization with the EdgeML iOS SDK, enabling adaptive learning similar to Google Keyboard.
+This guide explains how to implement continuous on-device personalization with the Octomil iOS SDK, enabling adaptive learning similar to Google Keyboard.
 
 ## Overview
 
@@ -20,17 +20,17 @@ Personalization allows your app to incrementally improve its ML model based on u
 ### 1. Initialize Personalization Manager
 
 ```swift
-import EdgeML
+import Octomil
 
 // Create configuration
-let config = EdgeMLConfiguration(
+let config = OctomilConfiguration(
     apiKey: "your-api-key",
-    serverURL: URL(string: "https://api.edgeml.ai")!,
+    serverURL: URL(string: "https://api.octomil.com")!,
     enableLogging: true
 )
 
 // Create client and trainer
-let client = EdgeMLClient(configuration: config)
+let client = OctomilClient(configuration: config)
 let trainer = FederatedTrainer(configuration: config)
 
 // Create personalization manager
@@ -120,7 +120,7 @@ for session in history {
 ```swift
 class KeyboardMLManager {
     private let personalization: PersonalizationManager
-    private let model: EdgeMLModel
+    private let model: OctomilModel
 
     func userTyped(_ text: String) async {
         // Extract context (previous words)
@@ -427,5 +427,5 @@ struct PersonalizationSettingsView: View {
 ## References
 
 - [CoreML On-Device Training](https://developer.apple.com/documentation/coreml/updating_a_model_with_on-device_training)
-- [EdgeML Federated Learning Guide](FEDERATED_LEARNING.md)
+- [Octomil Federated Learning Guide](FEDERATED_LEARNING.md)
 - [Privacy Best Practices](PRIVACY.md)

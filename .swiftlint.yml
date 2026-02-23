@@ -1,4 +1,4 @@
-# SwiftLint Configuration for EdgeML iOS SDK
+# SwiftLint Configuration for Octomil iOS SDK
 # Tuned for an ML/crypto SDK with mathematical code patterns
 
 excluded:

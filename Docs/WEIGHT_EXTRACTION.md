@@ -168,8 +168,8 @@ def deserialize_ios_weights(data: bytes) -> dict:
 - Use compression (zlib) for additional 30-40% reduction
 
 ```swift
-// Enable compression in EdgeMLConfiguration
-let config = EdgeMLConfiguration(
+// Enable compression in OctomilConfiguration
+let config = OctomilConfiguration(
     enableCompression: true,  // Compress weight updates
     compressionLevel: 6       // Balance speed vs size
 )
@@ -186,7 +186,7 @@ do {
         trainingResult: result
     )
     try await client.uploadWeights(update)
-} catch EdgeMLError.weightExtractionFailed(let reason) {
+} catch OctomilError.weightExtractionFailed(let reason) {
     // Log failure, retry with different approach
     logger.error("Weight extraction failed: \(reason)")
 
@@ -278,4 +278,4 @@ do {
 - [CoreML Updatable Models](https://developer.apple.com/documentation/coreml/updating_a_model_with_on-device_training)
 - [coremltools Documentation](https://coremltools.readme.io/)
 - [PyTorch to CoreML Conversion](https://pytorch.org/mobile/ios/#core-ml)
-- [EdgeML Federated Learning Guide](../docs/FEDERATED_LEARNING.md)
+- [Octomil Federated Learning Guide](../docs/FEDERATED_LEARNING.md)

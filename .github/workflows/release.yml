@@ -58,8 +58,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.tag }}
         run: |
-          git archive --format=tar.gz --prefix=EdgeML-${VERSION}/ -o EdgeML-${VERSION}.tar.gz HEAD
-          echo "archive=EdgeML-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
+          git archive --format=tar.gz --prefix=Octomil-${VERSION}/ -o Octomil-${VERSION}.tar.gz HEAD
+          echo "archive=Octomil-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Generate subject hash
         id: hash
@@ -116,6 +116,6 @@ jobs:
           gh release create "${VERSION}" \
             "${ARCHIVE}" \
             "${PROVENANCE}" \
-            --title "EdgeML iOS ${VERSION}" \
+            --title "Octomil iOS ${VERSION}" \
             --generate-notes \
             --repo "${GITHUB_REPOSITORY}"
