@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Combine
 import XCTest
 @testable import EdgeML
 
@@ -156,18 +157,25 @@ final class PairingViewModelTests: XCTestCase {
         // A host with invalid characters should produce an error state
         let vm = PairingViewModel(token: "TEST", host: "")
 
+        let expectation = expectation(description: "State transitions to error")
+        var cancellable: AnyCancellable?
+
+        cancellable = vm.$state
+            .dropFirst() // skip the initial .connecting value
+            .sink { state in
+                if case .error(let message) = state {
+                    XCTAssertTrue(message.contains("Invalid server URL") || message.contains("error"),
+                                  "Unexpected error message: \(message)")
+                    expectation.fulfill()
+                }
+                // The flow may also fail with a network error since "" is not a valid URL
+                // that's still an acceptable outcome - the important thing is it doesn't crash
+            }
+
         vm.startPairing()
 
-        // Give the task a moment to execute
-        try? await Task.sleep(nanoseconds: 200_000_000)
-
-        if case .error(let message) = vm.state {
-            XCTAssertTrue(message.contains("Invalid server URL") || message.contains("error"),
-                          "Unexpected error message: \(message)")
-        } else {
-            // The flow may also fail with a network error since "" is not a valid URL
-            // that's still an acceptable outcome - the important thing is it doesn't crash
-        }
+        await fulfillment(of: [expectation], timeout: 2.0)
+        cancellable?.cancel()
     }
 
     func testRetryResetsToConnecting() async {
