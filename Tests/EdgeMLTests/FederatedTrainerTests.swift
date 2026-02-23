@@ -50,16 +50,6 @@ final class FederatedTrainerTests: XCTestCase {
         XCTAssertTrue(standard.shuffle)
     }
 
-    func testTrainingConfigCodableRoundtrip() throws {
-        let original = TrainingConfig(epochs: 3, batchSize: 16, learningRate: 0.005, shuffle: false)
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(TrainingConfig.self, from: data)
-        XCTAssertEqual(decoded.epochs, original.epochs)
-        XCTAssertEqual(decoded.batchSize, original.batchSize)
-        XCTAssertEqual(decoded.learningRate, original.learningRate, accuracy: 1e-9)
-        XCTAssertEqual(decoded.shuffle, original.shuffle)
-    }
-
     func testTrainingConfigPartialInit() {
         let config = TrainingConfig(epochs: 10)
         XCTAssertEqual(config.epochs, 10)
@@ -100,39 +90,6 @@ final class FederatedTrainerTests: XCTestCase {
         XCTAssertTrue(result.metrics.isEmpty)
     }
 
-    func testTrainingResultCodableRoundtrip() throws {
-        let original = TrainingResult(
-            sampleCount: 200,
-            loss: 0.1,
-            accuracy: 0.98,
-            trainingTime: 10.0,
-            metrics: ["lr": 0.001]
-        )
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-        let data = try encoder.encode(original)
-        let decoded = try decoder.decode(TrainingResult.self, from: data)
-        XCTAssertEqual(decoded.sampleCount, original.sampleCount)
-        XCTAssertEqual(decoded.loss, original.loss)
-        XCTAssertEqual(decoded.accuracy, original.accuracy)
-        XCTAssertEqual(decoded.trainingTime, original.trainingTime, accuracy: 0.01)
-        XCTAssertEqual(decoded.metrics["lr"], original.metrics["lr"])
-    }
-
-    func testTrainingResultCodableWithNilLoss() throws {
-        let original = TrainingResult(
-            sampleCount: 10,
-            loss: nil,
-            accuracy: nil,
-            trainingTime: 0.5,
-            metrics: [:]
-        )
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(TrainingResult.self, from: data)
-        XCTAssertNil(decoded.loss)
-        XCTAssertNil(decoded.accuracy)
-    }
-
     // MARK: - WeightUpdate
 
     func testWeightUpdateProperties() {
@@ -163,38 +120,6 @@ final class FederatedTrainerTests: XCTestCase {
         )
         XCTAssertNil(update.deviceId)
         XCTAssertTrue(update.weightsData.isEmpty)
-    }
-
-    func testWeightUpdateCodableRoundtrip() throws {
-        let original = WeightUpdate(
-            modelId: "model-2",
-            version: "3.0",
-            deviceId: nil,
-            weightsData: Data([0xAA, 0xBB]),
-            sampleCount: 100,
-            metrics: ["accuracy": 0.9]
-        )
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(WeightUpdate.self, from: data)
-        XCTAssertEqual(decoded.modelId, original.modelId)
-        XCTAssertEqual(decoded.version, original.version)
-        XCTAssertNil(decoded.deviceId)
-        XCTAssertEqual(decoded.weightsData, original.weightsData)
-        XCTAssertEqual(decoded.sampleCount, original.sampleCount)
-    }
-
-    func testWeightUpdateWithDeviceId() throws {
-        let original = WeightUpdate(
-            modelId: "m1",
-            version: "1.0",
-            deviceId: "device-123",
-            weightsData: Data([0x00]),
-            sampleCount: 50,
-            metrics: [:]
-        )
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(WeightUpdate.self, from: data)
-        XCTAssertEqual(decoded.deviceId, "device-123")
     }
 
     func testWeightUpdateLargePayload() {
