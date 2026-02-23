@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. v1.0.0)'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build Source Archive
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+      version: ${{ steps.version.outputs.version }}
+      archive: ${{ steps.archive.outputs.archive }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Determine version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_VERSION"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Create tag if needed (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if ! git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            git tag "${TAG}"
+            git push origin "${TAG}"
+          fi
+
+      - name: Create source archive
+        id: archive
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+        run: |
+          git archive --format=tar.gz --prefix=Octomil-${VERSION}/ -o Octomil-${VERSION}.tar.gz HEAD
+          echo "archive=Octomil-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Generate subject hash
+        id: hash
+        env:
+          ARCHIVE: ${{ steps.archive.outputs.archive }}
+        run: |
+          echo "hashes=$(sha256sum "${ARCHIVE}" | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact for provenance
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-archive
+          path: ${{ steps.archive.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 1
+
+  provenance:
+    name: Generate SLSA Provenance
+    needs: build
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build, provenance]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-archive
+
+      - name: Download provenance
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+          ARCHIVE: ${{ needs.build.outputs.archive }}
+          PROVENANCE: ${{ needs.provenance.outputs.provenance-name }}
+        run: |
+          gh release create "${VERSION}" \
+            "${ARCHIVE}" \
+            "${PROVENANCE}" \
+            --title "Octomil iOS ${VERSION}" \
+            --generate-notes \
+            --repo "${GITHUB_REPOSITORY}"

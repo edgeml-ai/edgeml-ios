@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions: {}
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-14
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Build
+        run: |
+          xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=iPhone 15' build
+
+      - name: Run tests with coverage
+        run: |
+          xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
+
+      - name: Generate coverage report
+        run: |
+          xcrun xccov view --report --json TestResults.xcresult > coverage.json
+          xcrun xccov view --report TestResults.xcresult
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          file: ./coverage.json
+          flags: swift
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: macos-14
+    needs: test
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run tests with coverage
+        run: |
+          xcodebuild -scheme Octomil -destination 'platform=iOS Simulator,name=iPhone 15' -enableCodeCoverage YES -resultBundlePath TestResults test
+
+      - name: Generate coverage report for SonarCloud
+        run: |
+          xcrun xccov view --report --json TestResults.xcresult > coverage.json
+          xcrun xccov view --report TestResults.xcresult
+
+      - name: Convert coverage to SonarCloud generic format
+        run: |
+          python3 << 'PYEOF'
+          import json, subprocess, xml.etree.ElementTree as ET
+
+          result = subprocess.run(
+              ["xcrun", "xccov", "view", "--report", "--json", "TestResults.xcresult"],
+              capture_output=True, text=True, check=True,
+          )
+          report = json.loads(result.stdout)
+
+          root = ET.Element("coverage", version="1")
+          for target in report.get("targets", []):
+              for src in target.get("files", []):
+                  path = src.get("path", "")
+                  if not path or "/Tests/" in path:
+                      continue
+                  file_el = ET.SubElement(root, "file", path=path)
+                  lines_out = subprocess.run(
+                      ["xcrun", "xccov", "view", "--file", path, "TestResults.xcresult"],
+                      capture_output=True, text=True,
+                  )
+                  for num, raw_line in enumerate(lines_out.stdout.splitlines(), 1):
+                      col = raw_line.split(":")[0].strip() if ":" in raw_line else ""
+                      if col and col != "*":
+                          try:
+                              hits = int(col)
+                              ET.SubElement(file_el, "lineToCover",
+                                  lineNumber=str(num), covered=("true" if hits > 0 else "false"))
+                          except ValueError:
+                              pass
+
+          tree = ET.ElementTree(root)
+          ET.indent(tree)
+          tree.write("sonar-coverage.xml", xml_declaration=True, encoding="UTF-8")
+          print("Generated sonar-coverage.xml")
+          PYEOF
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+
+  security:
+    name: Security Scan
+    runs-on: macos-14
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run SwiftLint
+        run: |
+          brew install swiftlint
+          swiftlint lint --reporter json > swiftlint-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: security-reports
+          path: swiftlint-report.json
