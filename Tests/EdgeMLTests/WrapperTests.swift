@@ -342,22 +342,40 @@ final class EdgeMLWrappedModelTests: XCTestCase {
     }
 
     func testReplaceModelUpdatesUnderlying() throws {
-        // This test requires a compiled CoreML model, which is not available
-        // in unit tests without a .mlmodelc bundle. We verify the API exists
-        // and the method is accessible at compile time.
-        // In integration tests with a real model, we would verify:
-        //   let wrapped = try EdgeML.wrap(model1, modelId: "test")
-        //   wrapped.replaceModel(model2)
-        //   XCTAssertTrue(wrapped.underlyingModel === model2)
+        throw XCTSkip("Requires a compiled .mlmodelc bundle — covered by integration tests")
     }
 
-    func testPersistTelemetryCallsThrough() {
-        let queue = makeTelemetryQueue()
+    func testPersistTelemetryCallsThrough() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrapper_persist_test_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let persistURL = dir.appendingPathComponent("events.json")
+
+        let queue = TelemetryQueue(
+            modelId: "test_model",
+            serverURL: nil,
+            apiKey: nil,
+            batchSize: 100,
+            flushInterval: 0,
+            persistenceURL: persistURL
+        )
         queue.recordSuccess(latencyMs: 10.0)
 
-        // persistEvents should not crash even when called multiple times
         queue.persistEvents()
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: persistURL.path),
+            "persistEvents should write events to disk"
+        )
+
+        // Second call should not crash or corrupt
         queue.persistEvents()
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: persistURL.path),
+            "Second persistEvents should still leave file intact"
+        )
+
+        // Cleanup
+        try? FileManager.default.removeItem(at: dir)
     }
 
     // MARK: - Helpers

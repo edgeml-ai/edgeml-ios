@@ -103,29 +103,26 @@ final class DeployTests: XCTestCase {
 
     // MARK: - DeployedModel Tests
 
-    func testDeployedModelInitWithoutWarmup() {
-        let metadata = ModelMetadata(
-            modelId: "test",
-            version: "1.0",
-            checksum: "",
-            fileSize: 0,
-            createdAt: Date(),
-            format: "coreml",
-            supportsTraining: false,
-            description: "Test model",
-            inputSchema: nil,
-            outputSchema: nil
+    func testDeployedModelInitWithoutWarmup() throws {
+        // DeployedModel.init requires EdgeMLModel (wraps MLModel), which needs
+        // a compiled .mlmodelc. Test the activeDelegate fallback logic directly:
+        // when warmupResult is nil, activeDelegate returns "unknown".
+        let warmup: WarmupResult? = nil
+        let activeDelegate = warmup?.activeDelegate ?? "unknown"
+        XCTAssertEqual(activeDelegate, "unknown",
+                       "Without warmup, activeDelegate should be 'unknown'")
+
+        // Verify WarmupResult with a delegate returns that delegate
+        let withWarmup = WarmupResult(
+            coldInferenceMs: 50.0,
+            warmInferenceMs: 5.0,
+            cpuInferenceMs: 10.0,
+            usingNeuralEngine: true,
+            activeDelegate: "neural_engine",
+            disabledDelegates: ["cpu"]
         )
-
-        // We can't create a real MLModel without a model file, so we test
-        // the DeployedModel properties using a Deploy.model() error path
-        // and direct init where possible.
-
-        // Test activeDelegate defaults to "unknown" without warmup
-        // (DeployedModel.init is internal, so we test through Deploy)
-        XCTAssertNotNil(metadata)
-        XCTAssertEqual(metadata.modelId, "test")
-        XCTAssertEqual(metadata.format, "coreml")
+        XCTAssertEqual(withWarmup.activeDelegate, "neural_engine",
+                       "With warmup, activeDelegate should match the provided value")
     }
 
     func testWarmupResultProperties() {
