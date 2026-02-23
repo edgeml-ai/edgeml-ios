@@ -310,8 +310,9 @@ final class RuntimeAdaptationTests: XCTestCase {
         XCTAssertEqual(state.batteryState, .full)
         #endif
 
-        // Memory should always be > 0 on a real machine
-        XCTAssertGreaterThan(state.availableMemoryMB, 0)
+        // Memory should always be >= 0 after monitoring starts.
+        // On iOS Simulator, os_proc_available_memory() may return 0.
+        XCTAssertGreaterThanOrEqual(state.availableMemoryMB, 0)
 
         await monitor.stopMonitoring()
     }
