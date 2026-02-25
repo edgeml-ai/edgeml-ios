@@ -89,6 +89,76 @@ public actor FederatedTrainer {
         return result
     }
 
+    /// Trains a model only if the device is eligible based on battery, thermal, and network state.
+    ///
+    /// Checks device eligibility first. If ineligible, caches the intent and returns nil.
+    /// If eligible, performs training via ``train(model:dataProvider:config:)`` and
+    /// optionally caches the resulting gradient for later upload if the network is unsuitable.
+    ///
+    /// - Parameters:
+    ///   - model: The model to train.
+    ///   - dataProvider: Closure that provides training data.
+    ///   - config: Training configuration.
+    ///   - deviceState: Current device state snapshot.
+    ///   - gradientCache: Optional gradient cache for persisting results offline.
+    ///   - networkMonitor: Network monitor to assess upload suitability.
+    /// - Returns: Training result if training was performed, nil if skipped.
+    public func trainIfEligible(
+        model: OctomilModel,
+        dataProvider: () -> MLBatchProvider,
+        config: TrainingConfig,
+        deviceState: DeviceStateMonitor.DeviceState,
+        gradientCache: GradientCache? = nil,
+        networkMonitor: NetworkMonitor = .shared
+    ) async throws -> TrainingResult? {
+        let eligibility = TrainingEligibility.check(
+            deviceState: deviceState,
+            policy: configuration.training
+        )
+
+        guard eligibility.eligible else {
+            if configuration.enableLogging {
+                logger.info("Training skipped: \(eligibility.reason?.rawValue ?? "unknown")")
+            }
+            return nil
+        }
+
+        let result = try await train(
+            model: model,
+            dataProvider: dataProvider,
+            config: config
+        )
+
+        // Cache gradient if network is not suitable for immediate upload
+        if let cache = gradientCache {
+            let networkQuality = TrainingEligibility.assessNetworkQuality(
+                isConnected: networkMonitor.isConnected,
+                isExpensive: networkMonitor.isExpensive,
+                isConstrained: networkMonitor.isConstrained
+            )
+            if !networkQuality.suitable {
+                let weightUpdate = try await extractWeightUpdate(
+                    model: model,
+                    trainingResult: result
+                )
+                let entry = GradientCacheEntry(
+                    roundId: UUID().uuidString,
+                    modelId: model.id,
+                    modelVersion: model.version,
+                    weightsData: weightUpdate.weightsData,
+                    sampleCount: result.sampleCount
+                )
+                await cache.store(entry)
+
+                if configuration.enableLogging {
+                    logger.info("Gradient cached for later upload: \(networkQuality.reason?.rawValue ?? "unknown network issue")")
+                }
+            }
+        }
+
+        return result
+    }
+
     /// Extracts weight updates from a trained model.
     ///
     /// Attempts to extract weight deltas (updated - original) when possible.
