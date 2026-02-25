@@ -75,6 +75,99 @@ public struct TrainingOutcome: Sendable {
     }
 }
 
+// MARK: - Gradient Cache Entry
+
+/// A cached gradient update that has not yet been submitted to the server.
+///
+/// Used by ``GradientCache`` to persist weight updates across app restarts
+/// when network is unavailable or training is interrupted.
+public struct GradientCacheEntry: Codable, Sendable {
+    /// The round this gradient was computed for.
+    public let roundId: String
+    /// Model identifier.
+    public let modelId: String
+    /// Model version at the time of training.
+    public let modelVersion: String
+    /// Serialized weight delta.
+    public let weightsData: Data
+    /// Number of local training samples.
+    public let sampleCount: Int
+    /// When this entry was created.
+    public let createdAt: Date
+    /// Whether this entry has been successfully submitted to the server.
+    public var submitted: Bool
+
+    public init(
+        roundId: String,
+        modelId: String,
+        modelVersion: String,
+        weightsData: Data,
+        sampleCount: Int,
+        createdAt: Date = Date(),
+        submitted: Bool = false
+    ) {
+        self.roundId = roundId
+        self.modelId = modelId
+        self.modelVersion = modelVersion
+        self.weightsData = weightsData
+        self.sampleCount = sampleCount
+        self.createdAt = createdAt
+        self.submitted = submitted
+    }
+}
+
+// MARK: - Training Eligibility Result
+
+/// Result of a training eligibility check.
+public struct EligibilityResult: Sendable {
+    /// Whether the device is eligible for training.
+    public let eligible: Bool
+    /// Reason training was skipped, if not eligible.
+    public let reason: IneligibilityReason?
+
+    public init(eligible: Bool, reason: IneligibilityReason? = nil) {
+        self.eligible = eligible
+        self.reason = reason
+    }
+}
+
+/// Reason why a device is not eligible for training.
+public enum IneligibilityReason: String, Sendable {
+    /// Battery level is below the configured minimum.
+    case lowBattery
+    /// Device is under thermal pressure (serious or critical).
+    case thermalPressure
+    /// Low Power Mode is enabled.
+    case lowPowerMode
+    /// Training requires charging but device is not plugged in.
+    case notCharging
+}
+
+// MARK: - Network Quality
+
+/// Assessment of network suitability for gradient upload.
+public struct NetworkQualityResult: Sendable {
+    /// Whether the network is suitable for uploading gradients.
+    public let suitable: Bool
+    /// Reason the network is not suitable, if applicable.
+    public let reason: NetworkIneligibilityReason?
+
+    public init(suitable: Bool, reason: NetworkIneligibilityReason? = nil) {
+        self.suitable = suitable
+        self.reason = reason
+    }
+}
+
+/// Reason why the network is not suitable for gradient upload.
+public enum NetworkIneligibilityReason: String, Sendable {
+    /// No network connection available.
+    case noConnection
+    /// Network connection is expensive (metered/cellular).
+    case expensiveNetwork
+    /// Network connection is constrained (Low Data Mode).
+    case constrainedNetwork
+}
+
 // MARK: - Missing Training Signature Error
 
 /// Error thrown when a model lacks training support and
