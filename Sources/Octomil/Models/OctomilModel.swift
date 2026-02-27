@@ -198,7 +198,7 @@ public final class OctomilModel: @unchecked Sendable {
             resolvedEngine = engine
         } else {
             switch modality {
-            case .text:
+            case .text, .timeSeries:
                 resolvedEngine = LLMEngine(modelPath: compiledModelURL)
             case .image:
                 resolvedEngine = ImageEngine(modelPath: compiledModelURL)
