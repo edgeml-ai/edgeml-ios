@@ -145,6 +145,13 @@ public final class EngineRegistry: @unchecked Sendable {
         registerDefaults()
     }
 
+    /// Remove all registrations without re-installing defaults. Intended for testing.
+    public func removeAllRegistrations() {
+        lock.lock()
+        defer { lock.unlock() }
+        factories.removeAll()
+    }
+
     // MARK: - Private
 
     private func registerDefaults() {
