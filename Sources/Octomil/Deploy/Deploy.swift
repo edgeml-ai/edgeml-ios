@@ -155,15 +155,12 @@ public enum Deploy {
         return try MLDictionaryFeatureProvider(dictionary: dict as! [String: Any])
     }
 
-    private static func resolveEngine(engine: Engine) -> Engine {
-        switch engine {
-        case .auto:
-            return .coreml
-        case .coreml:
-            return .coreml
-        case .mlx:
-            return .mlx
+    private static func resolveEngine(engine: Engine, url: URL? = nil) -> Engine {
+        if engine != .auto { return engine }
+        if let url = url, let inferred = EngineRegistry.engineFromURL(url) {
+            return inferred
         }
+        return .coreml
     }
 }
 
