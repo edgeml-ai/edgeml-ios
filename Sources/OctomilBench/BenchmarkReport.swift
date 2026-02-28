@@ -54,6 +54,136 @@ public struct MetricStats: Codable, Sendable {
     }
 }
 
+// MARK: - Welch's t-test
+
+public struct SignificanceTest: Codable, Sendable {
+    public let metric: String
+    public let meanA: Double
+    public let meanB: Double
+    public let tStatistic: Double
+    public let degreesOfFreedom: Double
+    public let pValue: Double
+    public let cohensD: Double
+    public let significant: Bool      // p < 0.05
+
+    /// Two-sample Welch's t-test (unequal variances).
+    public static func welch(
+        metric: String,
+        a: [Double],
+        b: [Double]
+    ) -> SignificanceTest {
+        let nA = Double(a.count)
+        let nB = Double(b.count)
+        let meanA = a.reduce(0, +) / nA
+        let meanB = b.reduce(0, +) / nB
+        let varA = a.map { ($0 - meanA) * ($0 - meanA) }.reduce(0, +) / (nA - 1)
+        let varB = b.map { ($0 - meanB) * ($0 - meanB) }.reduce(0, +) / (nB - 1)
+
+        let seA = varA / nA
+        let seB = varB / nB
+        let se = (seA + seB).squareRoot()
+
+        let t = se > 0 ? (meanA - meanB) / se : 0
+
+        // Welch-Satterthwaite degrees of freedom
+        let num = (seA + seB) * (seA + seB)
+        let denA = nA > 1 ? (seA * seA) / (nA - 1) : 0
+        let denB = nB > 1 ? (seB * seB) / (nB - 1) : 0
+        let df = (denA + denB) > 0 ? num / (denA + denB) : 1
+
+        // Cohen's d (pooled stddev)
+        let pooledVar = ((nA - 1) * varA + (nB - 1) * varB) / (nA + nB - 2)
+        let d = pooledVar > 0 ? (meanA - meanB) / pooledVar.squareRoot() : 0
+
+        // Approximate p-value from t-distribution using regularized incomplete beta
+        let p = tDistPValue(t: abs(t), df: df)
+
+        return SignificanceTest(
+            metric: metric,
+            meanA: meanA,
+            meanB: meanB,
+            tStatistic: t,
+            degreesOfFreedom: df,
+            pValue: p,
+            cohensD: d,
+            significant: p < 0.05
+        )
+    }
+
+    /// Two-tailed p-value approximation for t-distribution.
+    /// Uses the approximation: p ≈ 2 * (1 - Φ(|t| * sqrt(df/(df-2+t²))))
+    /// which is accurate for df > 3.
+    private static func tDistPValue(t: Double, df: Double) -> Double {
+        guard df > 0, t.isFinite else { return 1.0 }
+        // For large df, t-dist ≈ normal
+        if df > 100 {
+            return 2 * normalCDF(-abs(t))
+        }
+        // Hill's approximation
+        let x = df / (df + t * t)
+        let p = regularizedIncompleteBeta(a: df / 2, b: 0.5, x: x)
+        return p
+    }
+
+    /// Standard normal CDF via error function approximation (Abramowitz & Stegun 7.1.26).
+    private static func normalCDF(_ x: Double) -> Double {
+        let a1 = 0.254829592
+        let a2 = -0.284496736
+        let a3 = 1.421413741
+        let a4 = -1.453152027
+        let a5 = 1.061405429
+        let p = 0.3275911
+        let sign: Double = x < 0 ? -1 : 1
+        let absX = abs(x) / 2.0.squareRoot()
+        let t = 1.0 / (1.0 + p * absX)
+        let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * exp(-absX * absX)
+        return 0.5 * (1.0 + sign * y)
+    }
+
+    /// Regularized incomplete beta function via continued fraction (Lentz's method).
+    private static func regularizedIncompleteBeta(a: Double, b: Double, x: Double) -> Double {
+        guard x > 0, x < 1 else {
+            return x <= 0 ? 0 : 1
+        }
+        let lnBeta = lgamma(a) + lgamma(b) - lgamma(a + b)
+        let front = exp(log(x) * a + log(1 - x) * b - lnBeta)
+
+        // Use Lentz's continued fraction
+        var f = 1.0
+        var c = 1.0
+        var d = 1.0 - (a + b) * x / (a + 1)
+        if abs(d) < 1e-30 { d = 1e-30 }
+        d = 1.0 / d
+        f = d
+
+        for m in 1...200 {
+            let mf = Double(m)
+            // Even step
+            var num = mf * (b - mf) * x / ((a + 2 * mf - 1) * (a + 2 * mf))
+            d = 1.0 + num * d
+            if abs(d) < 1e-30 { d = 1e-30 }
+            c = 1.0 + num / c
+            if abs(c) < 1e-30 { c = 1e-30 }
+            d = 1.0 / d
+            f *= c * d
+
+            // Odd step
+            num = -(a + mf) * (a + b + mf) * x / ((a + 2 * mf) * (a + 2 * mf + 1))
+            d = 1.0 + num * d
+            if abs(d) < 1e-30 { d = 1e-30 }
+            c = 1.0 + num / c
+            if abs(c) < 1e-30 { c = 1e-30 }
+            d = 1.0 / d
+            let delta = c * d
+            f *= delta
+
+            if abs(delta - 1.0) < 1e-10 { break }
+        }
+
+        return front * f / a
+    }
+}
+
 // MARK: - Generation Parameters
 
 public struct GenerationParams: Codable, Sendable {
@@ -108,6 +238,7 @@ public struct BenchmarkReport: Codable, Sendable {
     public let system: SystemInfo
     public let config: RunConfig
     public let results: [ModelBenchmarkResult]
+    public let significanceTests: [SignificanceTest]?
 }
 
 public struct RunConfig: Codable, Sendable {
@@ -204,33 +335,101 @@ public enum ReportFormatter {
     }
 
     private static func printSummary(_ results: [ModelBenchmarkResult]) {
-        print()
-        print("Summary (tok/s winner per model):")
-
         let grouped = Dictionary(grouping: results) { $0.model.name }
+
         for (name, group) in grouped.sorted(by: { $0.key < $1.key }) {
             guard group.count >= 2 else { continue }
             let sorted = group.sorted { $0.result.tokensPerSecond > $1.result.tokensPerSecond }
             let winner = sorted[0]
             let loser = sorted[1]
-            guard loser.result.tokensPerSecond > 0 else { continue }
-            let speedup = winner.result.tokensPerSecond / loser.result.tokensPerSecond
-            let tpotRatio = (loser.tpotMs ?? 1) / (winner.tpotMs ?? 1)
-            print("  \(name): \(winner.engine) wins (\(String(format: "%.1f", speedup))x faster tok/s, \(String(format: "%.1f", tpotRatio))x lower TPOT)")
+
+            let winIters = winner.iterationResults
+            let loseIters = loser.iterationResults
+            guard winIters.count >= 2, loseIters.count >= 2 else { continue }
+
+            print()
+            print("Statistical Comparison: \(name)")
+            print(String(repeating: "-", count: 50))
+
+            let speedup = loser.result.tokensPerSecond > 0
+                ? winner.result.tokensPerSecond / loser.result.tokensPerSecond : 0
+
+            let tests = [
+                SignificanceTest.welch(
+                    metric: "Tok/s",
+                    a: winIters.map(\.tokensPerSecond),
+                    b: loseIters.map(\.tokensPerSecond)
+                ),
+                SignificanceTest.welch(
+                    metric: "TPOT (ms)",
+                    a: winIters.map(\.tpotMs),
+                    b: loseIters.map(\.tpotMs)
+                ),
+                SignificanceTest.welch(
+                    metric: "E2E (ms)",
+                    a: winIters.map(\.e2eMs),
+                    b: loseIters.map(\.e2eMs)
+                ),
+            ]
+
+            print("  Winner: \(winner.engine) (\(fmtF(speedup))x faster tok/s)")
+            print()
+            print("  \(pad("Metric", 12))| \(pad(winner.engine, 10))| \(pad(loser.engine, 10))| \(pad("t-stat", 8, left: false)) | \(pad("df", 5, left: false)) | \(pad("p-value", 10, left: false)) | \(pad("Cohen's d", 9, left: false)) | Sig?")
+            print("  \(String(repeating: "-", count: 80))")
+
+            for t in tests {
+                let pStr = t.pValue < 0.001
+                    ? "<0.001"
+                    : fmtF(t.pValue, 4)
+                let sig = t.significant ? "YES" : "no"
+                let dMag: String
+                let absD = abs(t.cohensD)
+                if absD >= 0.8 { dMag = " (large)" }
+                else if absD >= 0.5 { dMag = " (medium)" }
+                else if absD >= 0.2 { dMag = " (small)" }
+                else { dMag = " (negligible)" }
+
+                print("  \(pad(t.metric, 12))| \(pad(fmtF(t.meanA), 10, left: false))| \(pad(fmtF(t.meanB), 10, left: false))| \(pad(fmtF(t.tStatistic, 2), 8, left: false)) | \(pad(fmtF(t.degreesOfFreedom, 1), 5, left: false)) | \(pad(pStr, 10, left: false)) | \(pad(fmtF(absD, 2), 6, left: false))\(dMag) | \(sig)")
+            }
+
+            print()
+            if tests.allSatisfy({ $0.significant }) {
+                print("  All metrics statistically significant (p < 0.05)")
+            } else {
+                let notSig = tests.filter { !$0.significant }.map(\.metric)
+                print("  Not significant: \(notSig.joined(separator: ", "))")
+            }
         }
     }
 
     public static func jsonReport(_ results: [ModelBenchmarkResult], config: RunConfig) -> String {
+        let tests = computeSignificanceTests(results)
         let report = BenchmarkReport(
             version: "1.0.0",
             timestamp: ISO8601DateFormatter().string(from: Date()),
             system: SystemInfo.collect(),
             config: config,
-            results: results
+            results: results,
+            significanceTests: tests.isEmpty ? nil : tests
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(report) else { return "{}" }
         return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private static func computeSignificanceTests(_ results: [ModelBenchmarkResult]) -> [SignificanceTest] {
+        var tests: [SignificanceTest] = []
+        let grouped = Dictionary(grouping: results) { $0.model.name }
+        for (_, group) in grouped.sorted(by: { $0.key < $1.key }) {
+            guard group.count >= 2 else { continue }
+            let a = group[0].iterationResults
+            let b = group[1].iterationResults
+            guard a.count >= 2, b.count >= 2 else { continue }
+            tests.append(SignificanceTest.welch(metric: "tok_per_sec", a: a.map(\.tokensPerSecond), b: b.map(\.tokensPerSecond)))
+            tests.append(SignificanceTest.welch(metric: "tpot_ms", a: a.map(\.tpotMs), b: b.map(\.tpotMs)))
+            tests.append(SignificanceTest.welch(metric: "e2e_ms", a: a.map(\.e2eMs), b: b.map(\.e2eMs)))
+        }
+        return tests
     }
 }
