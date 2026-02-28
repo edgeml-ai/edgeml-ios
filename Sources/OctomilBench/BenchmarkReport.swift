@@ -66,16 +66,27 @@ public struct RunConfig: Codable, Sendable {
 
 public enum ReportFormatter {
 
+    private static func pad(_ s: String, _ width: Int, left: Bool = true) -> String {
+        if s.count >= width { return String(s.prefix(width)) }
+        let padding = String(repeating: " ", count: width - s.count)
+        return left ? s + padding : padding + s
+    }
+
+    private static func fmtF(_ v: Double, _ decimals: Int = 1) -> String {
+        String(format: "%.\(decimals)f", v)
+    }
+
     public static func printTable(_ results: [ModelBenchmarkResult], config: RunConfig) {
         let prompt = config.prompt
-        let promptTokenCount = prompt.split(separator: " ").count  // rough estimate
+        let promptTokenCount = prompt.split(separator: " ").count
 
         print()
         let header = "Octomil Benchmark Tool v1.0.0"
         print(header)
         print(String(repeating: "=", count: header.count))
         print("System: \(SystemInfo.collect().summary)")
-        print("Prompt: \"\(prompt.prefix(80))\(prompt.count > 80 ? "..." : "")\"")
+        let truncatedPrompt = prompt.count > 80 ? String(prompt.prefix(80)) + "..." : prompt
+        print("Prompt: \"\(truncatedPrompt)\"")
         print("Config: \(config.iterations) iterations, \(config.warmup) warmup, \(config.maxTokens) max tokens, temp=\(config.temperature), topP=\(config.topP)")
         print()
 
@@ -83,8 +94,8 @@ public enum ReportFormatter {
         let thinDivider = String(repeating: "-", count: 122)
 
         print(divider)
-        print(String(format: "%-20s| %-9s| %6s | %7s | %9s | %9s | %8s | %6s | %8s | %8s | %6s",
-            "Model", "Engine", "Tok/s", "TPOT ms", "TTFT Warm", "TTFT Cold", "E2E ms", "Tokens", "KV Cache", "Mem MB", "Status"))
+        let headerRow = "\(pad("Model", 20))| \(pad("Engine", 9))| \(pad("Tok/s", 6, left: false)) | \(pad("TPOT ms", 7, left: false)) | \(pad("TTFT Warm", 9, left: false)) | \(pad("TTFT Cold", 9, left: false)) | \(pad("E2E ms", 8, left: false)) | \(pad("Tokens", 6, left: false)) | \(pad("KV Cache", 8, left: false)) | \(pad("Mem MB", 8, left: false)) | \(pad("Status", 6, left: false))"
+        print(headerRow)
         print(divider)
 
         var currentModel = ""
@@ -94,24 +105,13 @@ public enum ReportFormatter {
             }
             currentModel = r.model.name
 
-            let tokS = r.result.tokensPerSecond
-            let tpot = r.tpotMs ?? 0
-            let ttftWarm = r.ttftWarmMs ?? 0
-            let ttftCold = r.ttftColdMs ?? 0
-            let e2e = r.e2eMs ?? 0
             let totalTokens = r.iterationResults.first.map { "\($0.outputTokens)/\($0.promptTokens)" } ?? "N/A"
             let kvCache = r.kvCacheSpeedup.map { String(format: "%.2fx", $0) } ?? "N/A"
-            let mem = r.result.memoryMb > 0 ? String(format: "%.1f", r.result.memoryMb) : "N/A"
+            let mem = r.result.memoryMb > 0 ? fmtF(r.result.memoryMb) : "N/A"
             let status = r.result.ok ? "OK" : "FAIL"
 
-            print(String(format: "%-20s| %-9s| %6.1f | %7.1f | %9.1f | %9.1f | %8.1f | %6s | %8s | %8s | %6s",
-                r.model.name.prefix(20) as CVarArg,
-                r.engine as CVarArg,
-                tokS, tpot, ttftWarm, ttftCold, e2e,
-                totalTokens as CVarArg,
-                kvCache as CVarArg,
-                mem as CVarArg,
-                status as CVarArg))
+            let row = "\(pad(String(r.model.name.prefix(20)), 20))| \(pad(r.engine, 9))| \(pad(fmtF(r.result.tokensPerSecond), 6, left: false)) | \(pad(fmtF(r.tpotMs ?? 0), 7, left: false)) | \(pad(fmtF(r.ttftWarmMs ?? 0), 9, left: false)) | \(pad(fmtF(r.ttftColdMs ?? 0), 9, left: false)) | \(pad(fmtF(r.e2eMs ?? 0), 8, left: false)) | \(pad(totalTokens, 6, left: false)) | \(pad(kvCache, 8, left: false)) | \(pad(mem, 8, left: false)) | \(pad(status, 6, left: false))"
+            print(row)
         }
 
         print(divider)
