@@ -13,6 +13,7 @@ public struct IterationResult: Codable, Sendable {
     public let outputTokens: Int
     public let outputText: String
     public let totalDurationMs: Double
+    public let memBandwidthGBs: Double    // Effective memory bandwidth (GB/s)
 }
 
 // MARK: - Statistics
@@ -24,23 +25,32 @@ public struct MetricStats: Codable, Sendable {
     public let max: Double
     public let p50: Double
     public let p95: Double
+    public let ci95Lower: Double
+    public let ci95Upper: Double
+    public let n: Int
 
     public static func compute(from values: [Double]) -> MetricStats {
         guard !values.isEmpty else {
-            return MetricStats(mean: 0, stddev: 0, min: 0, max: 0, p50: 0, p95: 0)
+            return MetricStats(mean: 0, stddev: 0, min: 0, max: 0, p50: 0, p95: 0, ci95Lower: 0, ci95Upper: 0, n: 0)
         }
         let sorted = values.sorted()
         let n = Double(sorted.count)
         let mean = sorted.reduce(0, +) / n
-        let variance = sorted.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / n
+        let variance = n > 1
+            ? sorted.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / (n - 1)
+            : 0
         let stddev = variance.squareRoot()
+        let margin = 1.96 * stddev / n.squareRoot()
         return MetricStats(
             mean: mean,
             stddev: stddev,
             min: sorted.first!,
             max: sorted.last!,
             p50: percentile(sorted, 0.50),
-            p95: percentile(sorted, 0.95)
+            p95: percentile(sorted, 0.95),
+            ci95Lower: mean - margin,
+            ci95Upper: mean + margin,
+            n: Int(n)
         )
     }
 
@@ -212,6 +222,9 @@ public struct ModelBenchmarkResult: Codable, Sendable {
     public let iterationResults: [IterationResult]
     public let stats: BenchmarkStats?
     public let outputPreview: String?
+    public let memBandwidthGBs: Double?
+    public let power: PowerReading?
+    public let energyPerTokenMJ: Double?    // millijoules per token
 }
 
 public struct BenchmarkStats: Codable, Sendable {
@@ -219,13 +232,15 @@ public struct BenchmarkStats: Codable, Sendable {
     public let tpotMs: MetricStats
     public let ttftMs: MetricStats
     public let e2eMs: MetricStats
+    public let memBandwidthGBs: MetricStats
 
     public static func compute(from iterations: [IterationResult]) -> BenchmarkStats {
         BenchmarkStats(
             tokPerSec: MetricStats.compute(from: iterations.map(\.tokensPerSecond)),
             tpotMs: MetricStats.compute(from: iterations.map(\.tpotMs)),
             ttftMs: MetricStats.compute(from: iterations.map(\.ttftMs)),
-            e2eMs: MetricStats.compute(from: iterations.map(\.e2eMs))
+            e2eMs: MetricStats.compute(from: iterations.map(\.e2eMs)),
+            memBandwidthGBs: MetricStats.compute(from: iterations.map(\.memBandwidthGBs))
         )
     }
 }
@@ -277,11 +292,17 @@ public enum ReportFormatter {
         print()
 
         // Main results table
-        let divider = String(repeating: "=", count: 130)
-        let thinDivider = String(repeating: "-", count: 130)
+        let hasPower = results.contains { $0.power != nil }
+        let w = 160 + (hasPower ? 30 : 0)
+        let divider = String(repeating: "=", count: w)
+        let thinDivider = String(repeating: "-", count: w)
 
         print(divider)
-        let headerRow = "\(pad("Model", 20))| \(pad("Engine", 9))| \(pad("Tok/s", 6, left: false)) | \(pad("\u{00B1}stddev", 7, left: false)) | \(pad("TPOT ms", 7, left: false)) | \(pad("TTFT Warm", 9, left: false)) | \(pad("TTFT Cold", 9, left: false)) | \(pad("E2E ms", 8, left: false)) | \(pad("Tokens", 8, left: false)) | \(pad("KV Cache", 8, left: false)) | \(pad("Mem MB", 8, left: false)) | \(pad("Status", 6, left: false))"
+        var headerRow = "\(pad("Model", 20))| \(pad("Engine", 9))| \(pad("Tok/s", 6, left: false)) | \(pad("\u{00B1}stddev", 7, left: false)) | \(pad("TPOT ms", 7, left: false)) | \(pad("TTFT Warm", 9, left: false)) | \(pad("TTFT Cold", 9, left: false)) | \(pad("E2E ms", 8, left: false)) | \(pad("BW GB/s", 7, left: false)) | \(pad("Tokens", 8, left: false)) | \(pad("KV Cache", 8, left: false)) | \(pad("Mem MB", 8, left: false))"
+        if hasPower {
+            headerRow += " | \(pad("Power W", 7, left: false)) | \(pad("mJ/tok", 7, left: false))"
+        }
+        headerRow += " | \(pad("Status", 6, left: false))"
         print(headerRow)
         print(divider)
 
@@ -296,9 +317,16 @@ public enum ReportFormatter {
             let totalTokens = r.iterationResults.first.map { "\($0.outputTokens)/\($0.promptTokens)" } ?? "N/A"
             let kvCache = r.kvCacheSpeedup.map { String(format: "%.2fx", $0) } ?? "N/A"
             let mem = r.result.memoryMb > 0 ? fmtF(r.result.memoryMb) : "N/A"
+            let bw = r.memBandwidthGBs.map { fmtF($0) } ?? "N/A"
             let status = r.result.ok ? "OK" : "FAIL"
 
-            let row = "\(pad(String(r.model.name.prefix(20)), 20))| \(pad(r.engine, 9))| \(pad(fmtF(r.result.tokensPerSecond), 6, left: false)) | \(pad(tokStddev, 7, left: false)) | \(pad(fmtF(r.tpotMs ?? 0), 7, left: false)) | \(pad(fmtF(r.ttftWarmMs ?? 0), 9, left: false)) | \(pad(fmtF(r.ttftColdMs ?? 0), 9, left: false)) | \(pad(fmtF(r.e2eMs ?? 0), 8, left: false)) | \(pad(totalTokens, 8, left: false)) | \(pad(kvCache, 8, left: false)) | \(pad(mem, 8, left: false)) | \(pad(status, 6, left: false))"
+            var row = "\(pad(String(r.model.name.prefix(20)), 20))| \(pad(r.engine, 9))| \(pad(fmtF(r.result.tokensPerSecond), 6, left: false)) | \(pad(tokStddev, 7, left: false)) | \(pad(fmtF(r.tpotMs ?? 0), 7, left: false)) | \(pad(fmtF(r.ttftWarmMs ?? 0), 9, left: false)) | \(pad(fmtF(r.ttftColdMs ?? 0), 9, left: false)) | \(pad(fmtF(r.e2eMs ?? 0), 8, left: false)) | \(pad(bw, 7, left: false)) | \(pad(totalTokens, 8, left: false)) | \(pad(kvCache, 8, left: false)) | \(pad(mem, 8, left: false))"
+            if hasPower {
+                let pw = r.power.map { fmtF($0.totalW) } ?? "N/A"
+                let energy = r.energyPerTokenMJ.map { fmtF($0) } ?? "N/A"
+                row += " | \(pad(pw, 7, left: false)) | \(pad(energy, 7, left: false))"
+            }
+            row += " | \(pad(status, 6, left: false))"
             print(row)
         }
 
@@ -310,11 +338,12 @@ public enum ReportFormatter {
             print("Detailed Statistics (p50 / p95 / stddev):")
             for r in results {
                 guard let s = r.stats else { continue }
-                print("  \(r.model.name) [\(r.engine)]:")
-                print("    Tok/s:   p50=\(fmtF(s.tokPerSec.p50))  p95=\(fmtF(s.tokPerSec.p95))  \u{00B1}\(fmtF(s.tokPerSec.stddev))  range=[\(fmtF(s.tokPerSec.min))-\(fmtF(s.tokPerSec.max))]")
-                print("    TPOT:    p50=\(fmtF(s.tpotMs.p50))ms  p95=\(fmtF(s.tpotMs.p95))ms  \u{00B1}\(fmtF(s.tpotMs.stddev))ms")
-                print("    TTFT:    p50=\(fmtF(s.ttftMs.p50))ms  p95=\(fmtF(s.ttftMs.p95))ms  \u{00B1}\(fmtF(s.ttftMs.stddev))ms")
-                print("    E2E:     p50=\(fmtF(s.e2eMs.p50))ms  p95=\(fmtF(s.e2eMs.p95))ms  \u{00B1}\(fmtF(s.e2eMs.stddev))ms")
+                print("  \(r.model.name) [\(r.engine)] (n=\(s.tokPerSec.n)):")
+                print("    Tok/s:   \(fmtF(s.tokPerSec.mean)) [\(fmtF(s.tokPerSec.ci95Lower)), \(fmtF(s.tokPerSec.ci95Upper))]  p50=\(fmtF(s.tokPerSec.p50))  p95=\(fmtF(s.tokPerSec.p95))  \u{00B1}\(fmtF(s.tokPerSec.stddev))")
+                print("    TPOT:    \(fmtF(s.tpotMs.mean))ms [\(fmtF(s.tpotMs.ci95Lower)), \(fmtF(s.tpotMs.ci95Upper))]  p50=\(fmtF(s.tpotMs.p50))ms  \u{00B1}\(fmtF(s.tpotMs.stddev))ms")
+                print("    TTFT:    \(fmtF(s.ttftMs.mean))ms [\(fmtF(s.ttftMs.ci95Lower)), \(fmtF(s.ttftMs.ci95Upper))]  p50=\(fmtF(s.ttftMs.p50))ms  \u{00B1}\(fmtF(s.ttftMs.stddev))ms")
+                print("    E2E:     \(fmtF(s.e2eMs.mean))ms [\(fmtF(s.e2eMs.ci95Lower)), \(fmtF(s.e2eMs.ci95Upper))]  p50=\(fmtF(s.e2eMs.p50))ms  \u{00B1}\(fmtF(s.e2eMs.stddev))ms")
+                print("    BW:      \(fmtF(s.memBandwidthGBs.mean)) GB/s [\(fmtF(s.memBandwidthGBs.ci95Lower)), \(fmtF(s.memBandwidthGBs.ci95Upper))]  \u{00B1}\(fmtF(s.memBandwidthGBs.stddev))")
             }
         }
 

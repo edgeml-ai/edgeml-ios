@@ -13,6 +13,17 @@ public struct ModelSpec: Codable, Sendable, Hashable {
         self.ollamaId = ollamaId
         self.params = params
     }
+
+    /// Parse "1B" → 1e9, "0.5B" → 0.5e9, "3.8B" → 3.8e9
+    public var paramCount: Double {
+        let s = params.replacingOccurrences(of: "B", with: "")
+        return (Double(s) ?? 0) * 1e9
+    }
+
+    /// Estimated model weight size in bytes at 4-bit quantization.
+    public var weightSizeBytes: Double {
+        paramCount * 0.5
+    }
 }
 
 /// All benchmark models.
@@ -53,6 +64,24 @@ public enum ModelMatrix {
             mlxId: "mlx-community/Phi-3.5-mini-instruct-4bit",
             ollamaId: "phi3.5:latest",
             params: "3.8B"
+        ),
+        ModelSpec(
+            name: "Llama 3.1 8B",
+            mlxId: "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit",
+            ollamaId: "llama3.1:8b",
+            params: "8B"
+        ),
+        ModelSpec(
+            name: "Qwen 2.5 7B",
+            mlxId: "mlx-community/Qwen2.5-7B-Instruct-4bit",
+            ollamaId: "qwen2.5:7b",
+            params: "7B"
+        ),
+        ModelSpec(
+            name: "Mistral 7B",
+            mlxId: "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+            ollamaId: "mistral:7b",
+            params: "7B"
         ),
     ]
 

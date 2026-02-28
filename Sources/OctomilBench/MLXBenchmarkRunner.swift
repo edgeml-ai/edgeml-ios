@@ -18,7 +18,8 @@ public struct MLXBenchmarkRunner: Sendable {
         warmup: Int,
         maxTokens: Int,
         temperature: Double,
-        topP: Double
+        topP: Double,
+        converge: Bool = false
     ) async throws -> ModelBenchmarkResult {
         let loader = MLXModelLoader(gpuCacheLimit: 2 * 1024 * 1024 * 1024)
 
@@ -30,10 +31,21 @@ public struct MLXBenchmarkRunner: Sendable {
         var kvCacheTtft1: Double?
         var kvCacheTtft2: Double?
 
+        // Create one engine with cacheEnabled=true — reused across all iterations
+        // so KV cache persists between calls (same as Ollama's server-side cache)
+        let engine = MLXLLMEngine(
+            modelContainer: container,
+            maxTokens: maxTokens,
+            temperature: Float(temperature),
+            cacheEnabled: true
+        )
+
         // --- Cold run (first ever generation) ---
         print("  [octomil] Cold run...")
         let coldResult = try await runIteration(
+            engine: engine,
             container: container,
+            model: model,
             prompt: prompt,
             maxTokens: maxTokens,
             temperature: temperature,
@@ -46,7 +58,9 @@ public struct MLXBenchmarkRunner: Sendable {
         for w in 0..<warmup {
             print("  [octomil] Warmup \(w + 1)/\(warmup)...")
             _ = try await runIteration(
+                engine: engine,
                 container: container,
+                model: model,
                 prompt: prompt,
                 maxTokens: maxTokens,
                 temperature: temperature,
@@ -55,11 +69,14 @@ public struct MLXBenchmarkRunner: Sendable {
             )
         }
 
-        // --- Measured iterations ---
+        // --- Measured iterations (with optional auto-convergence) ---
+        let minIterations = converge ? Swift.max(5, iterations / 2) : iterations
         for i in 0..<iterations {
             print("  [octomil] Iteration \(i + 1)/\(iterations)...")
             let result = try await runIteration(
+                engine: engine,
                 container: container,
+                model: model,
                 prompt: prompt,
                 maxTokens: maxTokens,
                 temperature: temperature,
@@ -67,12 +84,23 @@ public struct MLXBenchmarkRunner: Sendable {
                 iteration: i + 1
             )
             allIterations.append(result)
+
+            // Auto-convergence: stop when CV < 5% after minimum iterations
+            if converge && allIterations.count >= minIterations {
+                let toks = allIterations.map(\.tokensPerSecond)
+                let mean = toks.reduce(0, +) / Double(toks.count)
+                let variance = toks.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(toks.count - 1)
+                let cv = mean > 0 ? variance.squareRoot() / mean : 1.0
+                if cv < 0.05 {
+                    print("  [octomil] Converged at iteration \(i + 1) (CV=\(String(format: "%.1f", cv * 100))%)")
+                    break
+                }
+            }
         }
 
         // --- KV cache measurement ---
-        // Create a persistent cache outside the engine so it survives across calls.
-        // MLXLLMEngine's internal cache storage has a bug where the first generation's
-        // KV cache is never captured (nil stored), so we measure via direct generate calls.
+        // Measure cache reuse via direct generate calls with explicit cache management.
+        // This isolates the KV cache speedup from other engine overhead.
         print("  [octomil] KV cache test (run 1, populate cache)...")
         let cacheTestResult1 = try await runIterationDirect(
             container: container,
@@ -91,7 +119,8 @@ public struct MLXBenchmarkRunner: Sendable {
             maxTokens: maxTokens,
             temperature: temperature,
             topP: topP,
-            existingCache: cacheTestResult1.cache
+            existingCache: cacheTestResult1.cache,
+            previousTokenIds: cacheTestResult1.promptTokenIds
         )
         kvCacheTtft2 = cacheTestResult2.ttftMs
 
@@ -145,26 +174,25 @@ public struct MLXBenchmarkRunner: Sendable {
             kvCacheSpeedup: kvSpeedup,
             iterationResults: allIterations,
             stats: stats,
-            outputPreview: outputPreview
+            outputPreview: outputPreview,
+            memBandwidthGBs: stats.memBandwidthGBs.mean,
+            power: nil,     // Set by orchestrator
+            energyPerTokenMJ: nil
         )
     }
 
     // MARK: - Via MLXLLMEngine + InstrumentedStreamWrapper (standard path)
 
     private func runIteration(
+        engine: MLXLLMEngine,
         container: ModelContainer,
+        model: ModelSpec,
         prompt: String,
         maxTokens: Int,
         temperature: Double,
         topP: Double,
         iteration: Int
     ) async throws -> IterationResult {
-        let engine = MLXLLMEngine(
-            modelContainer: container,
-            maxTokens: maxTokens,
-            temperature: Float(temperature),
-            cacheEnabled: false
-        )
         let wrapper = InstrumentedStreamWrapper(modality: .text, modelId: "bench")
         let (stream, getResult) = wrapper.wrap(engine, input: prompt)
 
@@ -191,6 +219,9 @@ public struct MLXBenchmarkRunner: Sendable {
             ? (metrics.totalDurationMs - metrics.ttfcMs) / Double(chunkCount - 1)
             : metrics.totalDurationMs
 
+        // Effective decode bandwidth: each token reads all model weights
+        let bw = model.weightSizeBytes * metrics.throughput / 1e9
+
         return IterationResult(
             iteration: iteration,
             tokensPerSecond: metrics.throughput,
@@ -200,7 +231,8 @@ public struct MLXBenchmarkRunner: Sendable {
             promptTokens: promptTokens,
             outputTokens: chunkCount,
             outputText: outputText,
-            totalDurationMs: metrics.totalDurationMs
+            totalDurationMs: metrics.totalDurationMs,
+            memBandwidthGBs: bw
         )
     }
 
@@ -221,7 +253,8 @@ public struct MLXBenchmarkRunner: Sendable {
         maxTokens: Int,
         temperature: Double,
         topP: Double,
-        existingCache: [KVCache]?
+        existingCache: [KVCache]?,
+        previousTokenIds: [Int]? = nil
     ) async throws -> DirectResult {
         let start = CFAbsoluteTimeGetCurrent()
         var firstTokenTime: Double?
@@ -235,9 +268,9 @@ public struct MLXBenchmarkRunner: Sendable {
 
             // Create or reuse cache
             let cache: [KVCache]
-            if let existing = existingCache {
-                // Trim cache to match prompt prefix
-                let commonLen = zip(promptTokenIds, promptTokenIds).prefix(while: { $0 == $1 }).count
+            if let existing = existingCache, let prevTokens = previousTokenIds {
+                // Trim cache to common prefix between previous and current prompt
+                let commonLen = zip(promptTokenIds, prevTokens).prefix(while: { $0 == $1 }).count
                 for kv in existing {
                     if kv.isTrimmable && kv.offset > commonLen - 1 {
                         let excess = kv.offset - (commonLen - 1)

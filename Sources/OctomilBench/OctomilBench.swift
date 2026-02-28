@@ -14,10 +14,10 @@ struct OctomilBench: AsyncParsableCommand {
     var models: String?
 
     @Option(name: .long, help: "Number of measured iterations per model per engine.")
-    var iterations: Int = 3
+    var iterations: Int = 10
 
     @Option(name: .long, help: "Number of warmup iterations (discarded).")
-    var warmup: Int = 1
+    var warmup: Int = 3
 
     @Option(name: .long, help: "Max tokens to generate per iteration.")
     var maxTokens: Int = 128
@@ -39,6 +39,9 @@ struct OctomilBench: AsyncParsableCommand {
 
     @Flag(name: .long, help: "Auto-pull missing Ollama models.")
     var pullMissing: Bool = false
+
+    @Flag(name: .long, help: "Auto-converge: keep iterating until CV < 5% (up to --iterations max).")
+    var converge: Bool = false
 
     @Option(name: .long, help: "Output format: table, json, or both.")
     var output: OutputFormat = .both
@@ -76,7 +79,8 @@ struct OctomilBench: AsyncParsableCommand {
             prompt: prompt,
             skipOllama: skipOllama,
             skipMlx: skipMlx,
-            pullMissing: pullMissing
+            pullMissing: pullMissing,
+            converge: converge
         )
 
         let results = try await orchestrator.run()

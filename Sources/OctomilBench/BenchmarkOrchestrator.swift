@@ -14,18 +14,20 @@ public struct BenchmarkOrchestrator: Sendable {
     public let skipOllama: Bool
     public let skipMlx: Bool
     public let pullMissing: Bool
+    public let converge: Bool
 
     public init(
         models: [ModelSpec],
-        iterations: Int = 3,
-        warmup: Int = 1,
+        iterations: Int = 10,
+        warmup: Int = 3,
         maxTokens: Int = 128,
         temperature: Double = 0.0,
         topP: Double = 0.9,
         prompt: String = "Explain the theory of general relativity in simple terms.",
         skipOllama: Bool = false,
         skipMlx: Bool = false,
-        pullMissing: Bool = false
+        pullMissing: Bool = false,
+        converge: Bool = false
     ) {
         self.models = models
         self.iterations = iterations
@@ -37,6 +39,7 @@ public struct BenchmarkOrchestrator: Sendable {
         self.skipOllama = skipOllama
         self.skipMlx = skipMlx
         self.pullMissing = pullMissing
+        self.converge = converge
     }
 
     public func run() async throws -> [ModelBenchmarkResult] {
@@ -50,6 +53,10 @@ public struct BenchmarkOrchestrator: Sendable {
                 throw BenchRunError.ollamaNotAvailable
             }
         }
+
+        // Start power sampling (requires root — silently skipped if unavailable)
+        let sampler = PowerSampler()
+        sampler.start()
 
         for (idx, model) in models.enumerated() {
             print("\n[\(idx + 1)/\(models.count)] Benchmarking: \(model.name) (\(model.params))")
@@ -66,10 +73,11 @@ public struct BenchmarkOrchestrator: Sendable {
                         warmup: warmup,
                         maxTokens: maxTokens,
                         temperature: temperature,
-                        topP: topP
+                        topP: topP,
+                        converge: converge
                     )
                     results.append(result)
-                    print("  [octomil] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s")
+                    print("  [octomil] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s | \(String(format: "%.1f", result.memBandwidthGBs ?? 0)) GB/s")
                 } catch {
                     print("  [octomil] FAILED: \(error.localizedDescription)")
                     results.append(errorResult(engine: "octomil", model: model, error: error))
@@ -88,14 +96,44 @@ public struct BenchmarkOrchestrator: Sendable {
                         maxTokens: maxTokens,
                         temperature: temperature,
                         topP: topP,
-                        pullMissing: pullMissing
+                        pullMissing: pullMissing,
+                        converge: converge
                     )
                     results.append(result)
-                    print("  [ollama] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s")
+                    print("  [ollama] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s | \(String(format: "%.1f", result.memBandwidthGBs ?? 0)) GB/s")
                 } catch {
                     print("  [ollama] FAILED: \(error.localizedDescription)")
                     results.append(errorResult(engine: "ollama", model: model, error: error))
                 }
+            }
+        }
+
+        // Stop power sampling and attach readings
+        let powerReading = sampler.stop()
+        if let power = powerReading {
+            print("\nPower: GPU \(String(format: "%.1f", power.gpuW))W + CPU \(String(format: "%.1f", power.cpuW))W = \(String(format: "%.1f", power.totalW))W (\(power.sampleCount) samples)")
+            // Attach power readings and compute energy per token
+            results = results.map { r in
+                let energyPerToken = r.result.tokensPerSecond > 0
+                    ? power.totalW * 1000.0 / r.result.tokensPerSecond
+                    : nil
+                return ModelBenchmarkResult(
+                    engine: r.engine,
+                    model: r.model,
+                    result: r.result,
+                    params: r.params,
+                    ttftColdMs: r.ttftColdMs,
+                    ttftWarmMs: r.ttftWarmMs,
+                    tpotMs: r.tpotMs,
+                    e2eMs: r.e2eMs,
+                    kvCacheSpeedup: r.kvCacheSpeedup,
+                    iterationResults: r.iterationResults,
+                    stats: r.stats,
+                    outputPreview: r.outputPreview,
+                    memBandwidthGBs: r.memBandwidthGBs,
+                    power: power,
+                    energyPerTokenMJ: energyPerToken
+                )
             }
         }
 
@@ -132,7 +170,10 @@ public struct BenchmarkOrchestrator: Sendable {
             kvCacheSpeedup: nil,
             iterationResults: [],
             stats: nil,
-            outputPreview: nil
+            outputPreview: nil,
+            memBandwidthGBs: nil,
+            power: nil,
+            energyPerTokenMJ: nil
         )
     }
 }

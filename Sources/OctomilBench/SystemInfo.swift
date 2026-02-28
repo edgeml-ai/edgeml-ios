@@ -18,8 +18,34 @@ public struct SystemInfo: Codable, Sendable {
         )
     }
 
+    /// Theoretical peak memory bandwidth (GB/s) for known Apple Silicon chips.
+    public var peakBandwidthGBs: Double? {
+        let chip = chipName.lowercased()
+        if chip.contains("m4 pro") { return 273 }
+        if chip.contains("m4 max") { return 546 }
+        if chip.contains("m4 ultra") { return 819 }
+        if chip.contains("m4") { return 120 }
+        if chip.contains("m3 pro") { return 150 }
+        if chip.contains("m3 max") { return 400 }
+        if chip.contains("m3 ultra") { return 800 }
+        if chip.contains("m3") { return 100 }
+        if chip.contains("m2 pro") { return 200 }
+        if chip.contains("m2 max") { return 400 }
+        if chip.contains("m2 ultra") { return 800 }
+        if chip.contains("m2") { return 100 }
+        if chip.contains("m1 pro") { return 200 }
+        if chip.contains("m1 max") { return 400 }
+        if chip.contains("m1 ultra") { return 800 }
+        if chip.contains("m1") { return 68 }
+        return nil
+    }
+
     public var summary: String {
-        "\(chipName) | \(memoryGb)GB RAM | macOS \(osVersion)"
+        var s = "\(chipName) | \(memoryGb)GB RAM | macOS \(osVersion)"
+        if let bw = peakBandwidthGBs {
+            s += " | Peak BW: \(Int(bw)) GB/s"
+        }
+        return s
     }
 
     private static func sysctl(name: String) -> String? {
