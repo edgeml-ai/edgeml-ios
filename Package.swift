@@ -31,6 +31,7 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.25.4"),
         .package(url: "https://github.com/kunal732/MLX-Swift-TS", branch: "main"),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     ],
     targets: [
         .target(
@@ -61,6 +62,18 @@ let package = Package(
                 .product(name: "MLXTimeSeries", package: "MLX-Swift-TS"),
             ],
             path: "Sources/OctomilTimeSeries"
+        ),
+        .executableTarget(
+            name: "OctomilBench",
+            dependencies: [
+                "Octomil",
+                "OctomilMLX",
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
+            path: "Sources/OctomilBench"
         ),
         .testTarget(
             name: "OctomilTests",
