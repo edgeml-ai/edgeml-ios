@@ -65,58 +65,60 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task { [weak self] in
                 do {
-                    var index = 0
+                    // Prepare input and get the generation stream inside container.perform.
+                    // Also capture the cache array so we can store it for next call.
+                    let (stream, cache, promptTokenIds) = try await container.perform {
+                        context -> (AsyncStream<Generation>, [KVCache]?, [Int]) in
 
-                    let result = try await container.perform { context in
                         let prepared = try await context.processor.prepare(input: .init(prompt: prompt))
-
-                        // Tokenize to get prompt token IDs for cache matching
                         let promptTokenIds = context.tokenizer.encode(text: prompt)
 
-                        // Fetch or create KV cache
                         let cache: [KVCache]? = cacheEnabled
-                            ? self?.fetchOrCreateCache(promptTokenIds: promptTokenIds, context: context)
+                            ? self?.fetchOrCreateCache(promptTokenIds: promptTokenIds)
                             : nil
 
-                        return try MLXLMCommon.generate(
+                        let genStream = try MLXLMCommon.generate(
                             input: prepared,
-                            parameters: .init(temperature: temperature, topP: 0.9, prefillStepSize: 4096),
-                            context: context,
-                            cache: cache
-                        ) { tokens in
-                            if Task.isCancelled {
-                                return .stop
-                            }
+                            cache: cache,
+                            parameters: .init(
+                                maxTokens: maxTokens,
+                                temperature: temperature,
+                                topP: 0.9,
+                                prefillStepSize: 4096
+                            ),
+                            context: context
+                        )
 
-                            let tokenCount = tokens.count
-                            if tokenCount > index {
-                                let newText = context.tokenizer.decode(tokens: Array(tokens[index...]))
-                                let data = Data(newText.utf8)
-                                let chunk = InferenceChunk(
-                                    index: index,
-                                    data: data,
-                                    modality: .text,
-                                    timestamp: Date(),
-                                    latencyMs: 0
-                                )
-                                continuation.yield(chunk)
-                                index = tokenCount
-                            }
+                        return (genStream, cache, promptTokenIds)
+                    }
 
-                            if tokenCount >= maxTokens {
-                                return .stop
-                            }
+                    // Iterate the generation stream outside container.perform
+                    var index = 0
+                    for await generation in stream {
+                        if Task.isCancelled { break }
 
-                            return .more
+                        switch generation {
+                        case .chunk(let text):
+                            let data = Data(text.utf8)
+                            let chunk = InferenceChunk(
+                                index: index,
+                                data: data,
+                                modality: .text,
+                                timestamp: Date(),
+                                latencyMs: 0
+                            )
+                            continuation.yield(chunk)
+                            index += 1
+
+                        case .info, .toolCall:
+                            break
                         }
                     }
 
-                    // Store cache for next generation
+                    // Store cache for reuse on next generation
                     if cacheEnabled {
-                        let promptTokenIds = await container.perform { context in
-                            context.tokenizer.encode(text: prompt)
-                        }
-                        self?.storeCache(promptTokenIds: promptTokenIds, cache: result.cache)
+                        self?.lastPromptTokens = promptTokenIds
+                        self?.lastKVCache = cache
                     }
 
                     continuation.finish()
@@ -134,8 +136,8 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
     // MARK: - KV Cache Management
 
     /// Find the longest common prefix between current prompt tokens and last cached tokens.
-    /// If commonLen >= 4, reuse the cache with trimming. Otherwise, create fresh caches.
-    private func fetchOrCreateCache(promptTokenIds: [Int], context: ModelContext) -> [KVCache]? {
+    /// If commonLen >= 4, reuse the cache with trimming. Otherwise, return nil.
+    private func fetchOrCreateCache(promptTokenIds: [Int]) -> [KVCache]? {
         guard let lastTokens = lastPromptTokens, let cachedKV = lastKVCache else {
             _cacheMisses += 1
             return nil
@@ -150,21 +152,18 @@ public final class MLXLLMEngine: StreamingInferenceEngine, @unchecked Sendable {
             return nil
         }
 
-        // Trim cache to common prefix length minus 1 (re-process last common token)
-        let trimTarget = commonLen - 1
+        // Trim cache: remove tokens beyond commonLen - 1 (re-process last common token).
+        // KVCache.offset gives current cache length; trim(_ n:) removes n tokens from the end.
         for kv in cachedKV {
             if kv.isTrimmable {
-                kv.trim(to: trimTarget)
+                let excess = kv.offset - (commonLen - 1)
+                if excess > 0 {
+                    kv.trim(excess)
+                }
             }
         }
 
         _cacheHits += 1
         return cachedKV
-    }
-
-    /// Store the KV cache and prompt tokens for potential reuse in the next generation.
-    private func storeCache(promptTokenIds: [Int], cache: [KVCache]?) {
-        lastPromptTokens = promptTokenIds
-        lastKVCache = cache
     }
 }
