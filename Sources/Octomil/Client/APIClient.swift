@@ -410,11 +410,11 @@ public actor APIClient {
         let _: EmptyResponse = try await performRequest(urlRequest)
     }
 
-    /// Tracks an event on the server.
+    /// Tracks a metric on the server.
     /// - Parameters:
     ///   - experimentId: Experiment identifier.
     ///   - event: Event to track.
-    public func trackEvent(experimentId: String, event: TrackingEvent) async throws {
+    public func trackMetric(experimentId: String, event: TrackingEvent) async throws {
         let url = serverURL.appendingPathComponent("api/v1/experiments/\(experimentId)/events")
 
         var urlRequest = URLRequest(url: url)
