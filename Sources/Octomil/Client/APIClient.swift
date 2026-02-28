@@ -426,6 +426,30 @@ public actor APIClient {
         let _: EmptyResponse = try await performRequest(urlRequest)
     }
 
+    // MARK: - Experiments
+
+    /// Fetches all active experiments.
+    public func getActiveExperiments() async throws -> [Experiment] {
+        let url = serverURL.appendingPathComponent("api/v1/experiments")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        return try await performRequest(urlRequest)
+    }
+
+    /// Fetches config for a specific experiment.
+    public func getExperimentConfig(experimentId: String) async throws -> Experiment {
+        let url = serverURL.appendingPathComponent("api/v1/experiments/\(experimentId)")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        try configureHeaders(&urlRequest)
+
+        return try await performRequest(urlRequest)
+    }
+
     // MARK: - Inference Events
 
     /// Reports a streaming inference event to the server (v1 legacy endpoint).

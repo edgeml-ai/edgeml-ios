@@ -59,6 +59,12 @@ public final class OctomilClient: @unchecked Sendable {
     /// Secure aggregation client, lazily created when SecAgg is used.
     private var secAggClient: SecureAggregationClient?
 
+    /// Experiments client for A/B testing.
+    public private(set) lazy var experiments = ExperimentsClient(
+        apiClient: apiClient,
+        telemetryQueue: TelemetryQueue.shared
+    )
+
     /// Offline event queue for offline-first event persistence.
     private let eventQueue: EventQueue
 
