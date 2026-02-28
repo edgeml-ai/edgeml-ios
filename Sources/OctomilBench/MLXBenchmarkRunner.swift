@@ -236,6 +236,161 @@ public struct MLXBenchmarkRunner: Sendable {
         )
     }
 
+    // MARK: - Raw MLX benchmark (bypasses engine + InstrumentedStreamWrapper)
+
+    /// Runs the full benchmark using raw MLXLMCommon.generate() — no engine, no wrapper.
+    /// This isolates MLX's actual performance from Octomil SDK overhead.
+    public func runRaw(
+        model: ModelSpec,
+        prompt: String,
+        iterations: Int,
+        warmup: Int,
+        maxTokens: Int,
+        temperature: Double,
+        topP: Double,
+        converge: Bool = false
+    ) async throws -> ModelBenchmarkResult {
+        let loader = MLXModelLoader(gpuCacheLimit: 2 * 1024 * 1024 * 1024)
+
+        print("  [mlx-raw] Loading \(model.mlxId)...")
+        let container = try await loader.loadFromHub(modelId: model.mlxId)
+
+        var allIterations: [IterationResult] = []
+        var ttftCold: Double?
+
+        // --- Cold run ---
+        print("  [mlx-raw] Cold run...")
+        let coldResult = try await runIterationRaw(
+            container: container, model: model, prompt: prompt,
+            maxTokens: maxTokens, temperature: temperature, topP: topP, iteration: 0
+        )
+        ttftCold = coldResult.ttftMs
+
+        // --- Warmup ---
+        for w in 0..<warmup {
+            print("  [mlx-raw] Warmup \(w + 1)/\(warmup)...")
+            _ = try await runIterationRaw(
+                container: container, model: model, prompt: prompt,
+                maxTokens: maxTokens, temperature: temperature, topP: topP, iteration: -1
+            )
+        }
+
+        // --- Measured iterations ---
+        let minIterations = converge ? Swift.max(5, iterations / 2) : iterations
+        for i in 0..<iterations {
+            print("  [mlx-raw] Iteration \(i + 1)/\(iterations)...")
+            let result = try await runIterationRaw(
+                container: container, model: model, prompt: prompt,
+                maxTokens: maxTokens, temperature: temperature, topP: topP, iteration: i + 1
+            )
+            allIterations.append(result)
+
+            if converge && allIterations.count >= minIterations {
+                let toks = allIterations.map(\.tokensPerSecond)
+                let mean = toks.reduce(0, +) / Double(toks.count)
+                let variance = toks.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(toks.count - 1)
+                let cv = mean > 0 ? variance.squareRoot() / mean : 1.0
+                if cv < 0.05 {
+                    print("  [mlx-raw] Converged at iteration \(i + 1) (CV=\(String(format: "%.1f", cv * 100))%)")
+                    break
+                }
+            }
+        }
+
+        let stats = BenchmarkStats.compute(from: allIterations)
+        let memMb = Double(Memory.activeMemory) / (1024 * 1024)
+
+        await loader.evictAll()
+
+        let outputPreview: String? = allIterations.first.map {
+            let text = $0.outputText.prefix(120)
+            return text.count < $0.outputText.count ? String(text) + "..." : String(text)
+        }
+
+        let benchResult = BenchmarkResult(
+            engineName: "mlx-raw",
+            tokensPerSecond: stats.tokPerSec.mean,
+            ttftMs: stats.ttftMs.mean,
+            memoryMb: memMb,
+            metadata: ["model": model.mlxId, "params": model.params]
+        )
+
+        let params = GenerationParams(
+            prompt: prompt, maxTokens: maxTokens, temperature: temperature, topP: topP,
+            prefillStepSize: 4096, cacheEnabled: false, gpuCacheLimitMb: 2048, quantization: "4bit"
+        )
+
+        return ModelBenchmarkResult(
+            engine: "mlx-raw", model: model, result: benchResult, params: params,
+            ttftColdMs: ttftCold, ttftWarmMs: stats.ttftMs.mean, tpotMs: stats.tpotMs.mean,
+            e2eMs: stats.e2eMs.mean, kvCacheSpeedup: nil, iterationResults: allIterations,
+            stats: stats, outputPreview: outputPreview, memBandwidthGBs: stats.memBandwidthGBs.mean,
+            power: nil, energyPerTokenMJ: nil
+        )
+    }
+
+    /// Runs generation directly via MLXLMCommon.generate() with zero SDK overhead.
+    /// No engine, no InstrumentedStreamWrapper, no InferenceChunk allocation.
+    private func runIterationRaw(
+        container: ModelContainer,
+        model: ModelSpec,
+        prompt: String,
+        maxTokens: Int,
+        temperature: Double,
+        topP: Double,
+        iteration: Int
+    ) async throws -> IterationResult {
+        let start = CFAbsoluteTimeGetCurrent()
+        var firstTokenTime: Double?
+        var tokenCount = 0
+        var outputText = ""
+
+        let promptTokens = try await container.perform { context -> Int in
+            context.tokenizer.encode(text: prompt).count
+        }
+
+        let stream = try await container.perform { context -> AsyncStream<Generation> in
+            let prepared = try await context.processor.prepare(input: .init(prompt: prompt))
+            return try MLXLMCommon.generate(
+                input: prepared,
+                parameters: .init(
+                    maxTokens: maxTokens,
+                    temperature: Float(temperature),
+                    topP: Float(topP),
+                    prefillStepSize: 4096
+                ),
+                context: context
+            )
+        }
+
+        for await generation in stream {
+            switch generation {
+            case .chunk(let text):
+                if firstTokenTime == nil {
+                    firstTokenTime = CFAbsoluteTimeGetCurrent()
+                }
+                outputText += text
+                tokenCount += 1
+            case .info, .toolCall:
+                break
+            }
+        }
+
+        let end = CFAbsoluteTimeGetCurrent()
+        let totalMs = (end - start) * 1000
+        let ttftMs = ((firstTokenTime ?? end) - start) * 1000
+        let tokPerSec = tokenCount > 0 ? Double(tokenCount) / (totalMs / 1000) : 0
+        let tpotMs = tokenCount > 1 ? (totalMs - ttftMs) / Double(tokenCount - 1) : totalMs
+        let bw = model.weightSizeBytes * tokPerSec / 1e9
+
+        return IterationResult(
+            iteration: iteration, tokensPerSecond: tokPerSec, tpotMs: tpotMs,
+            ttftMs: ttftMs, e2eMs: totalMs, promptTokens: promptTokens,
+            outputTokens: tokenCount, outputText: outputText,
+            totalDurationMs: totalMs, memBandwidthGBs: bw
+        )
+    }
+
     // MARK: - Direct MLXLMCommon.generate (for KV cache test)
 
     /// Result from a direct generation call, including the KV cache for reuse.

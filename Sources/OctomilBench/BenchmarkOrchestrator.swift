@@ -13,6 +13,7 @@ public struct BenchmarkOrchestrator: Sendable {
     public let prompt: String
     public let skipOllama: Bool
     public let skipMlx: Bool
+    public let skipLlamaCpp: Bool
     public let pullMissing: Bool
     public let converge: Bool
 
@@ -26,6 +27,7 @@ public struct BenchmarkOrchestrator: Sendable {
         prompt: String = "Explain the theory of general relativity in simple terms.",
         skipOllama: Bool = false,
         skipMlx: Bool = false,
+        skipLlamaCpp: Bool = false,
         pullMissing: Bool = false,
         converge: Bool = false
     ) {
@@ -38,6 +40,7 @@ public struct BenchmarkOrchestrator: Sendable {
         self.prompt = prompt
         self.skipOllama = skipOllama
         self.skipMlx = skipMlx
+        self.skipLlamaCpp = skipLlamaCpp
         self.pullMissing = pullMissing
         self.converge = converge
     }
@@ -84,6 +87,28 @@ public struct BenchmarkOrchestrator: Sendable {
                 }
             }
 
+            // MLX Raw (no engine overhead — proves MLX's actual speed)
+            if !skipMlx {
+                do {
+                    let mlxRunner = MLXBenchmarkRunner()
+                    let result = try await mlxRunner.runRaw(
+                        model: model,
+                        prompt: prompt,
+                        iterations: iterations,
+                        warmup: warmup,
+                        maxTokens: maxTokens,
+                        temperature: temperature,
+                        topP: topP,
+                        converge: converge
+                    )
+                    results.append(result)
+                    print("  [mlx-raw] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s | \(String(format: "%.1f", result.memBandwidthGBs ?? 0)) GB/s")
+                } catch {
+                    print("  [mlx-raw] FAILED: \(error.localizedDescription)")
+                    results.append(errorResult(engine: "mlx-raw", model: model, error: error))
+                }
+            }
+
             // Ollama
             if !skipOllama {
                 do {
@@ -104,6 +129,32 @@ public struct BenchmarkOrchestrator: Sendable {
                 } catch {
                     print("  [ollama] FAILED: \(error.localizedDescription)")
                     results.append(errorResult(engine: "ollama", model: model, error: error))
+                }
+            }
+
+            // llama.cpp (raw, no Ollama HTTP layer)
+            if !skipLlamaCpp {
+                do {
+                    let llamaRunner = LlamaCppBenchmarkRunner()
+                    guard llamaRunner.isAvailable() else {
+                        print("  [llama.cpp] SKIPPED: llama-cli not found")
+                        continue
+                    }
+                    let result = try await llamaRunner.run(
+                        model: model,
+                        prompt: prompt,
+                        iterations: iterations,
+                        warmup: warmup,
+                        maxTokens: maxTokens,
+                        temperature: temperature,
+                        topP: topP,
+                        converge: converge
+                    )
+                    results.append(result)
+                    print("  [llama.cpp] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s | \(String(format: "%.1f", result.memBandwidthGBs ?? 0)) GB/s")
+                } catch {
+                    print("  [llama.cpp] FAILED: \(error.localizedDescription)")
+                    results.append(errorResult(engine: "llama.cpp", model: model, error: error))
                 }
             }
         }

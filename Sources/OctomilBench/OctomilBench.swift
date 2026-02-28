@@ -37,6 +37,9 @@ struct OctomilBench: AsyncParsableCommand {
     @Flag(name: .long, help: "Skip Octomil benchmarks (Ollama only).")
     var skipMlx: Bool = false
 
+    @Flag(name: .long, help: "Skip llama.cpp benchmarks.")
+    var skipLlamacpp: Bool = false
+
     @Flag(name: .long, help: "Auto-pull missing Ollama models.")
     var pullMissing: Bool = false
 
@@ -79,6 +82,7 @@ struct OctomilBench: AsyncParsableCommand {
             prompt: prompt,
             skipOllama: skipOllama,
             skipMlx: skipMlx,
+            skipLlamaCpp: skipLlamacpp,
             pullMissing: pullMissing,
             converge: converge
         )
