@@ -1,7 +1,7 @@
 import Foundation
 import Octomil
 
-/// Runs cold/warm/cache benchmark iterations against Ollama.
+/// Runs cold/warm/cache benchmark iterations against Ollama via /api/chat.
 public struct OllamaBenchmarkRunner: Sendable {
     private let client: OllamaClient
 
@@ -19,7 +19,6 @@ public struct OllamaBenchmarkRunner: Sendable {
         topP: Double,
         pullMissing: Bool
     ) async throws -> ModelBenchmarkResult {
-        // Ensure model is available
         let hasModel = try await client.hasModel(model.ollamaId)
         if !hasModel {
             if pullMissing {
@@ -37,7 +36,7 @@ public struct OllamaBenchmarkRunner: Sendable {
 
         // --- Cold run ---
         print("  [ollama] Cold run...")
-        let coldResponse = try await client.generate(
+        let coldResponse = try await client.chat(
             model: model.ollamaId,
             prompt: prompt,
             maxTokens: maxTokens,
@@ -49,7 +48,7 @@ public struct OllamaBenchmarkRunner: Sendable {
         // --- Warmup ---
         for w in 0..<warmup {
             print("  [ollama] Warmup \(w + 1)/\(warmup)...")
-            _ = try await client.generate(
+            _ = try await client.chat(
                 model: model.ollamaId,
                 prompt: prompt,
                 maxTokens: maxTokens,
@@ -61,20 +60,19 @@ public struct OllamaBenchmarkRunner: Sendable {
         // --- Measured iterations ---
         for i in 0..<iterations {
             print("  [ollama] Iteration \(i + 1)/\(iterations)...")
-            let response = try await client.generate(
+            let response = try await client.chat(
                 model: model.ollamaId,
                 prompt: prompt,
                 maxTokens: maxTokens,
                 temperature: temperature,
                 topP: topP
             )
-            let result = parseIteration(response: response, iteration: i + 1, prompt: prompt)
-            allIterations.append(result)
+            allIterations.append(parseIteration(response: response, iteration: i + 1))
         }
 
-        // --- KV cache measurement ---
+        // --- KV cache measurement (Ollama server-side prompt cache) ---
         print("  [ollama] KV cache test (run 1)...")
-        let cache1 = try await client.generate(
+        let cache1 = try await client.chat(
             model: model.ollamaId,
             prompt: prompt,
             maxTokens: maxTokens,
@@ -83,8 +81,8 @@ public struct OllamaBenchmarkRunner: Sendable {
         )
         kvCacheTtft1 = nanosToMs(cache1.promptEvalDuration)
 
-        print("  [ollama] KV cache test (run 2)...")
-        let cache2 = try await client.generate(
+        print("  [ollama] KV cache test (run 2, server-side cache)...")
+        let cache2 = try await client.chat(
             model: model.ollamaId,
             prompt: prompt,
             maxTokens: maxTokens,
@@ -93,21 +91,25 @@ public struct OllamaBenchmarkRunner: Sendable {
         )
         kvCacheTtft2 = nanosToMs(cache2.promptEvalDuration)
 
-        // Compute averages
-        let avgTokS = allIterations.map(\.tokensPerSecond).reduce(0, +) / Double(allIterations.count)
-        let avgTpot = allIterations.map(\.tpotMs).reduce(0, +) / Double(allIterations.count)
-        let avgTtft = allIterations.map(\.ttftMs).reduce(0, +) / Double(allIterations.count)
-        let avgE2e = allIterations.map(\.e2eMs).reduce(0, +) / Double(allIterations.count)
+        // Compute stats
+        let stats = BenchmarkStats.compute(from: allIterations)
 
         let kvSpeedup: Double? = {
             guard let t1 = kvCacheTtft1, let t2 = kvCacheTtft2, t2 > 0 else { return nil }
             return t1 / t2
         }()
 
+        let outputPreview: String? = allIterations.first.map {
+            let text = $0.outputText.prefix(120)
+            return text.count < $0.outputText.count
+                ? String(text) + "..."
+                : String(text)
+        }
+
         let benchResult = BenchmarkResult(
             engineName: "ollama",
-            tokensPerSecond: avgTokS,
-            ttftMs: avgTtft,
+            tokensPerSecond: stats.tokPerSec.mean,
+            ttftMs: stats.ttftMs.mean,
             memoryMb: 0,
             metadata: ["model": model.ollamaId, "params": model.params]
         )
@@ -129,20 +131,21 @@ public struct OllamaBenchmarkRunner: Sendable {
             result: benchResult,
             params: params,
             ttftColdMs: ttftCold,
-            ttftWarmMs: avgTtft,
-            tpotMs: avgTpot,
-            e2eMs: avgE2e,
+            ttftWarmMs: stats.ttftMs.mean,
+            tpotMs: stats.tpotMs.mean,
+            e2eMs: stats.e2eMs.mean,
             kvCacheSpeedup: kvSpeedup,
-            iterationResults: allIterations
+            iterationResults: allIterations,
+            stats: stats,
+            outputPreview: outputPreview
         )
     }
 
     // MARK: - Helpers
 
     private func parseIteration(
-        response: OllamaClient.GenerateResponse,
-        iteration: Int,
-        prompt: String
+        response: OllamaClient.ChatResponse,
+        iteration: Int
     ) -> IterationResult {
         let evalCount = response.evalCount ?? 0
         let evalDurationNs = response.evalDuration ?? 1
@@ -168,7 +171,7 @@ public struct OllamaBenchmarkRunner: Sendable {
             e2eMs: e2eMs,
             promptTokens: response.promptEvalCount ?? 0,
             outputTokens: evalCount,
-            outputText: response.response,
+            outputText: response.message.content,
             totalDurationMs: e2eMs
         )
     }

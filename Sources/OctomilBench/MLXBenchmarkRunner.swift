@@ -5,7 +5,7 @@ import MLXLMCommon
 import Octomil
 import OctomilMLX
 
-/// Runs cold/warm/cache benchmark iterations against the MLX engine.
+/// Runs cold/warm/cache benchmark iterations against the Octomil MLX engine.
 @available(macOS 14.0, *)
 public struct MLXBenchmarkRunner: Sendable {
 
@@ -32,13 +32,12 @@ public struct MLXBenchmarkRunner: Sendable {
 
         // --- Cold run (first ever generation) ---
         print("  [octomil] Cold run...")
-        let coldResult = try await runSingleIteration(
+        let coldResult = try await runIteration(
             container: container,
             prompt: prompt,
             maxTokens: maxTokens,
             temperature: temperature,
             topP: topP,
-            cacheEnabled: false,
             iteration: 0
         )
         ttftCold = coldResult.ttftMs
@@ -46,13 +45,12 @@ public struct MLXBenchmarkRunner: Sendable {
         // --- Warmup iterations (discarded) ---
         for w in 0..<warmup {
             print("  [octomil] Warmup \(w + 1)/\(warmup)...")
-            _ = try await runSingleIteration(
+            _ = try await runIteration(
                 container: container,
                 prompt: prompt,
                 maxTokens: maxTokens,
                 temperature: temperature,
                 topP: topP,
-                cacheEnabled: false,
                 iteration: -1
             )
         }
@@ -60,48 +58,45 @@ public struct MLXBenchmarkRunner: Sendable {
         // --- Measured iterations ---
         for i in 0..<iterations {
             print("  [octomil] Iteration \(i + 1)/\(iterations)...")
-            let result = try await runSingleIteration(
+            let result = try await runIteration(
                 container: container,
                 prompt: prompt,
                 maxTokens: maxTokens,
                 temperature: temperature,
                 topP: topP,
-                cacheEnabled: false,
                 iteration: i + 1
             )
             allIterations.append(result)
         }
 
-        // --- KV cache measurement: same prompt twice with cache enabled ---
-        print("  [octomil] KV cache test (run 1)...")
-        let cacheEngine1 = MLXLLMEngine(
-            modelContainer: container,
-            maxTokens: maxTokens,
-            temperature: Float(temperature),
-            cacheEnabled: true
-        )
-        let cacheResult1 = try await runWithEngine(
-            engine: cacheEngine1,
+        // --- KV cache measurement ---
+        // Create a persistent cache outside the engine so it survives across calls.
+        // MLXLLMEngine's internal cache storage has a bug where the first generation's
+        // KV cache is never captured (nil stored), so we measure via direct generate calls.
+        print("  [octomil] KV cache test (run 1, populate cache)...")
+        let cacheTestResult1 = try await runIterationDirect(
+            container: container,
             prompt: prompt,
             maxTokens: maxTokens,
-            iteration: -1
+            temperature: temperature,
+            topP: topP,
+            existingCache: nil
         )
-        kvCacheTtft1 = cacheResult1.ttftMs
+        kvCacheTtft1 = cacheTestResult1.ttftMs
 
-        print("  [octomil] KV cache test (run 2, cache reuse)...")
-        let cacheResult2 = try await runWithEngine(
-            engine: cacheEngine1,
+        print("  [octomil] KV cache test (run 2, reuse cache)...")
+        let cacheTestResult2 = try await runIterationDirect(
+            container: container,
             prompt: prompt,
             maxTokens: maxTokens,
-            iteration: -1
+            temperature: temperature,
+            topP: topP,
+            existingCache: cacheTestResult1.cache
         )
-        kvCacheTtft2 = cacheResult2.ttftMs
+        kvCacheTtft2 = cacheTestResult2.ttftMs
 
         // Compute averages
-        let avgTokS = allIterations.map(\.tokensPerSecond).reduce(0, +) / Double(allIterations.count)
-        let avgTpot = allIterations.map(\.tpotMs).reduce(0, +) / Double(allIterations.count)
-        let avgTtft = allIterations.map(\.ttftMs).reduce(0, +) / Double(allIterations.count)
-        let avgE2e = allIterations.map(\.e2eMs).reduce(0, +) / Double(allIterations.count)
+        let stats = BenchmarkStats.compute(from: allIterations)
         let memMb = Double(Memory.activeMemory) / (1024 * 1024)
 
         let kvSpeedup: Double? = {
@@ -112,10 +107,17 @@ public struct MLXBenchmarkRunner: Sendable {
         // Evict to free GPU memory
         await loader.evictAll()
 
+        let outputPreview: String? = allIterations.first.map {
+            let text = $0.outputText.prefix(120)
+            return text.count < $0.outputText.count
+                ? String(text) + "..."
+                : String(text)
+        }
+
         let benchResult = BenchmarkResult(
             engineName: "octomil",
-            tokensPerSecond: avgTokS,
-            ttftMs: avgTtft,
+            tokensPerSecond: stats.tokPerSec.mean,
+            ttftMs: stats.ttftMs.mean,
             memoryMb: memMb,
             metadata: ["model": model.mlxId, "params": model.params]
         )
@@ -137,40 +139,32 @@ public struct MLXBenchmarkRunner: Sendable {
             result: benchResult,
             params: params,
             ttftColdMs: ttftCold,
-            ttftWarmMs: avgTtft,
-            tpotMs: avgTpot,
-            e2eMs: avgE2e,
+            ttftWarmMs: stats.ttftMs.mean,
+            tpotMs: stats.tpotMs.mean,
+            e2eMs: stats.e2eMs.mean,
             kvCacheSpeedup: kvSpeedup,
-            iterationResults: allIterations
+            iterationResults: allIterations,
+            stats: stats,
+            outputPreview: outputPreview
         )
     }
 
-    // MARK: - Single Iteration
+    // MARK: - Via MLXLLMEngine + InstrumentedStreamWrapper (standard path)
 
-    private func runSingleIteration(
+    private func runIteration(
         container: ModelContainer,
         prompt: String,
         maxTokens: Int,
         temperature: Double,
         topP: Double,
-        cacheEnabled: Bool,
         iteration: Int
     ) async throws -> IterationResult {
         let engine = MLXLLMEngine(
             modelContainer: container,
             maxTokens: maxTokens,
             temperature: Float(temperature),
-            cacheEnabled: cacheEnabled
+            cacheEnabled: false
         )
-        return try await runWithEngine(engine: engine, prompt: prompt, maxTokens: maxTokens, iteration: iteration)
-    }
-
-    private func runWithEngine(
-        engine: MLXLLMEngine,
-        prompt: String,
-        maxTokens: Int,
-        iteration: Int
-    ) async throws -> IterationResult {
         let wrapper = InstrumentedStreamWrapper(modality: .text, modelId: "bench")
         let (stream, getResult) = wrapper.wrap(engine, input: prompt)
 
@@ -188,7 +182,11 @@ public struct MLXBenchmarkRunner: Sendable {
             throw BenchRunError.noMetrics
         }
 
-        let promptTokens = prompt.split(separator: " ").count  // approximation
+        // Get actual token count from the tokenizer
+        let promptTokens = try await container.perform { context in
+            context.tokenizer.encode(text: prompt).count
+        }
+
         let tpot: Double = chunkCount > 1
             ? (metrics.totalDurationMs - metrics.ttfcMs) / Double(chunkCount - 1)
             : metrics.totalDurationMs
@@ -204,6 +202,81 @@ public struct MLXBenchmarkRunner: Sendable {
             outputText: outputText,
             totalDurationMs: metrics.totalDurationMs
         )
+    }
+
+    // MARK: - Direct MLXLMCommon.generate (for KV cache test)
+
+    /// Result from a direct generation call, including the KV cache for reuse.
+    private struct DirectResult: @unchecked Sendable {
+        let ttftMs: Double
+        let cache: [KVCache]?
+        let promptTokenIds: [Int]
+    }
+
+    /// Runs generation directly via MLXLMCommon.generate to properly manage KV cache.
+    /// When existingCache is provided, trims it to the common prefix and reuses it.
+    private func runIterationDirect(
+        container: ModelContainer,
+        prompt: String,
+        maxTokens: Int,
+        temperature: Double,
+        topP: Double,
+        existingCache: [KVCache]?
+    ) async throws -> DirectResult {
+        let start = CFAbsoluteTimeGetCurrent()
+        var firstTokenTime: Double?
+
+        let (genStream, cache, promptTokenIds) = try await container.perform {
+            context -> (AsyncStream<Generation>, [KVCache], [Int]) in
+
+            let prepared = try await context.processor.prepare(
+                input: .init(prompt: prompt))
+            let promptTokenIds = context.tokenizer.encode(text: prompt)
+
+            // Create or reuse cache
+            let cache: [KVCache]
+            if let existing = existingCache {
+                // Trim cache to match prompt prefix
+                let commonLen = zip(promptTokenIds, promptTokenIds).prefix(while: { $0 == $1 }).count
+                for kv in existing {
+                    if kv.isTrimmable && kv.offset > commonLen - 1 {
+                        let excess = kv.offset - (commonLen - 1)
+                        if excess > 0 { kv.trim(excess) }
+                    }
+                }
+                cache = existing
+            } else {
+                cache = context.model.newCache(parameters: nil)
+            }
+
+            let stream = try MLXLMCommon.generate(
+                input: prepared,
+                cache: cache,
+                parameters: .init(
+                    maxTokens: maxTokens,
+                    temperature: Float(temperature),
+                    topP: Float(topP),
+                    prefillStepSize: 4096
+                ),
+                context: context
+            )
+
+            return (stream, cache, promptTokenIds)
+        }
+
+        for await generation in genStream {
+            switch generation {
+            case .chunk:
+                if firstTokenTime == nil {
+                    firstTokenTime = CFAbsoluteTimeGetCurrent()
+                }
+            case .info, .toolCall:
+                break
+            }
+        }
+
+        let ttftMs = ((firstTokenTime ?? start) - start) * 1000
+        return DirectResult(ttftMs: ttftMs, cache: cache, promptTokenIds: promptTokenIds)
     }
 }
 

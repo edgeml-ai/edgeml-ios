@@ -15,6 +15,45 @@ public struct IterationResult: Codable, Sendable {
     public let totalDurationMs: Double
 }
 
+// MARK: - Statistics
+
+public struct MetricStats: Codable, Sendable {
+    public let mean: Double
+    public let stddev: Double
+    public let min: Double
+    public let max: Double
+    public let p50: Double
+    public let p95: Double
+
+    public static func compute(from values: [Double]) -> MetricStats {
+        guard !values.isEmpty else {
+            return MetricStats(mean: 0, stddev: 0, min: 0, max: 0, p50: 0, p95: 0)
+        }
+        let sorted = values.sorted()
+        let n = Double(sorted.count)
+        let mean = sorted.reduce(0, +) / n
+        let variance = sorted.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / n
+        let stddev = variance.squareRoot()
+        return MetricStats(
+            mean: mean,
+            stddev: stddev,
+            min: sorted.first!,
+            max: sorted.last!,
+            p50: percentile(sorted, 0.50),
+            p95: percentile(sorted, 0.95)
+        )
+    }
+
+    private static func percentile(_ sorted: [Double], _ p: Double) -> Double {
+        guard sorted.count > 1 else { return sorted.first ?? 0 }
+        let index = p * Double(sorted.count - 1)
+        let lower = Int(index)
+        let upper = Swift.min(lower + 1, sorted.count - 1)
+        let frac = index - Double(lower)
+        return sorted[lower] * (1 - frac) + sorted[upper] * frac
+    }
+}
+
 // MARK: - Generation Parameters
 
 public struct GenerationParams: Codable, Sendable {
@@ -41,6 +80,24 @@ public struct ModelBenchmarkResult: Codable, Sendable {
     public let e2eMs: Double?
     public let kvCacheSpeedup: Double?
     public let iterationResults: [IterationResult]
+    public let stats: BenchmarkStats?
+    public let outputPreview: String?
+}
+
+public struct BenchmarkStats: Codable, Sendable {
+    public let tokPerSec: MetricStats
+    public let tpotMs: MetricStats
+    public let ttftMs: MetricStats
+    public let e2eMs: MetricStats
+
+    public static func compute(from iterations: [IterationResult]) -> BenchmarkStats {
+        BenchmarkStats(
+            tokPerSec: MetricStats.compute(from: iterations.map(\.tokensPerSecond)),
+            tpotMs: MetricStats.compute(from: iterations.map(\.tpotMs)),
+            ttftMs: MetricStats.compute(from: iterations.map(\.ttftMs)),
+            e2eMs: MetricStats.compute(from: iterations.map(\.e2eMs))
+        )
+    }
 }
 
 // MARK: - Full Report
@@ -77,24 +134,23 @@ public enum ReportFormatter {
     }
 
     public static func printTable(_ results: [ModelBenchmarkResult], config: RunConfig) {
-        let prompt = config.prompt
-        let promptTokenCount = prompt.split(separator: " ").count
-
         print()
         let header = "Octomil Benchmark Tool v1.0.0"
         print(header)
         print(String(repeating: "=", count: header.count))
         print("System: \(SystemInfo.collect().summary)")
+        let prompt = config.prompt
         let truncatedPrompt = prompt.count > 80 ? String(prompt.prefix(80)) + "..." : prompt
         print("Prompt: \"\(truncatedPrompt)\"")
         print("Config: \(config.iterations) iterations, \(config.warmup) warmup, \(config.maxTokens) max tokens, temp=\(config.temperature), topP=\(config.topP)")
         print()
 
-        let divider = String(repeating: "=", count: 122)
-        let thinDivider = String(repeating: "-", count: 122)
+        // Main results table
+        let divider = String(repeating: "=", count: 130)
+        let thinDivider = String(repeating: "-", count: 130)
 
         print(divider)
-        let headerRow = "\(pad("Model", 20))| \(pad("Engine", 9))| \(pad("Tok/s", 6, left: false)) | \(pad("TPOT ms", 7, left: false)) | \(pad("TTFT Warm", 9, left: false)) | \(pad("TTFT Cold", 9, left: false)) | \(pad("E2E ms", 8, left: false)) | \(pad("Tokens", 6, left: false)) | \(pad("KV Cache", 8, left: false)) | \(pad("Mem MB", 8, left: false)) | \(pad("Status", 6, left: false))"
+        let headerRow = "\(pad("Model", 20))| \(pad("Engine", 9))| \(pad("Tok/s", 6, left: false)) | \(pad("\u{00B1}stddev", 7, left: false)) | \(pad("TPOT ms", 7, left: false)) | \(pad("TTFT Warm", 9, left: false)) | \(pad("TTFT Cold", 9, left: false)) | \(pad("E2E ms", 8, left: false)) | \(pad("Tokens", 8, left: false)) | \(pad("KV Cache", 8, left: false)) | \(pad("Mem MB", 8, left: false)) | \(pad("Status", 6, left: false))"
         print(headerRow)
         print(divider)
 
@@ -105,19 +161,46 @@ public enum ReportFormatter {
             }
             currentModel = r.model.name
 
+            let tokStddev = r.stats.map { fmtF($0.tokPerSec.stddev) } ?? "N/A"
             let totalTokens = r.iterationResults.first.map { "\($0.outputTokens)/\($0.promptTokens)" } ?? "N/A"
             let kvCache = r.kvCacheSpeedup.map { String(format: "%.2fx", $0) } ?? "N/A"
             let mem = r.result.memoryMb > 0 ? fmtF(r.result.memoryMb) : "N/A"
             let status = r.result.ok ? "OK" : "FAIL"
 
-            let row = "\(pad(String(r.model.name.prefix(20)), 20))| \(pad(r.engine, 9))| \(pad(fmtF(r.result.tokensPerSecond), 6, left: false)) | \(pad(fmtF(r.tpotMs ?? 0), 7, left: false)) | \(pad(fmtF(r.ttftWarmMs ?? 0), 9, left: false)) | \(pad(fmtF(r.ttftColdMs ?? 0), 9, left: false)) | \(pad(fmtF(r.e2eMs ?? 0), 8, left: false)) | \(pad(totalTokens, 6, left: false)) | \(pad(kvCache, 8, left: false)) | \(pad(mem, 8, left: false)) | \(pad(status, 6, left: false))"
+            let row = "\(pad(String(r.model.name.prefix(20)), 20))| \(pad(r.engine, 9))| \(pad(fmtF(r.result.tokensPerSecond), 6, left: false)) | \(pad(tokStddev, 7, left: false)) | \(pad(fmtF(r.tpotMs ?? 0), 7, left: false)) | \(pad(fmtF(r.ttftWarmMs ?? 0), 9, left: false)) | \(pad(fmtF(r.ttftColdMs ?? 0), 9, left: false)) | \(pad(fmtF(r.e2eMs ?? 0), 8, left: false)) | \(pad(totalTokens, 8, left: false)) | \(pad(kvCache, 8, left: false)) | \(pad(mem, 8, left: false)) | \(pad(status, 6, left: false))"
             print(row)
         }
 
         print(divider)
+
+        // Per-metric statistics
+        if config.iterations > 1 {
+            print()
+            print("Detailed Statistics (p50 / p95 / stddev):")
+            for r in results {
+                guard let s = r.stats else { continue }
+                print("  \(r.model.name) [\(r.engine)]:")
+                print("    Tok/s:   p50=\(fmtF(s.tokPerSec.p50))  p95=\(fmtF(s.tokPerSec.p95))  \u{00B1}\(fmtF(s.tokPerSec.stddev))  range=[\(fmtF(s.tokPerSec.min))-\(fmtF(s.tokPerSec.max))]")
+                print("    TPOT:    p50=\(fmtF(s.tpotMs.p50))ms  p95=\(fmtF(s.tpotMs.p95))ms  \u{00B1}\(fmtF(s.tpotMs.stddev))ms")
+                print("    TTFT:    p50=\(fmtF(s.ttftMs.p50))ms  p95=\(fmtF(s.ttftMs.p95))ms  \u{00B1}\(fmtF(s.ttftMs.stddev))ms")
+                print("    E2E:     p50=\(fmtF(s.e2eMs.p50))ms  p95=\(fmtF(s.e2eMs.p95))ms  \u{00B1}\(fmtF(s.e2eMs.stddev))ms")
+            }
+        }
+
+        // Output text preview
+        let previews = results.filter { $0.outputPreview != nil }
+        if !previews.isEmpty {
+            print()
+            print("Output Preview (first 120 chars):")
+            for r in previews {
+                print("  [\(r.engine)] \(r.outputPreview!)")
+            }
+        }
+
         printSummary(results)
         print()
-        print("Parameters: prompt_len=~\(promptTokenCount), max_tokens=\(config.maxTokens), temp=\(config.temperature), top_p=\(config.topP), mlx_prefill_step=4096, mlx_gpu_cache=2048MB")
+        let promptTokens = results.first?.iterationResults.first?.promptTokens ?? 0
+        print("Parameters: prompt_tokens=\(promptTokens), max_tokens=\(config.maxTokens), temp=\(config.temperature), top_p=\(config.topP), mlx_prefill_step=4096, mlx_gpu_cache=2048MB")
     }
 
     private static func printSummary(_ results: [ModelBenchmarkResult]) {
@@ -133,7 +216,7 @@ public enum ReportFormatter {
             guard loser.result.tokensPerSecond > 0 else { continue }
             let speedup = winner.result.tokensPerSecond / loser.result.tokensPerSecond
             let tpotRatio = (loser.tpotMs ?? 1) / (winner.tpotMs ?? 1)
-            print("  \(name): \(winner.engine) wins (\(String(format: "%.1f", speedup))x faster, \(String(format: "%.1f", tpotRatio))x lower TPOT)")
+            print("  \(name): \(winner.engine) wins (\(String(format: "%.1f", speedup))x faster tok/s, \(String(format: "%.1f", tpotRatio))x lower TPOT)")
         }
     }
 

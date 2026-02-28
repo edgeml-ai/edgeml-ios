@@ -130,7 +130,9 @@ public struct BenchmarkOrchestrator: Sendable {
             tpotMs: nil,
             e2eMs: nil,
             kvCacheSpeedup: nil,
-            iterationResults: []
+            iterationResults: [],
+            stats: nil,
+            outputPreview: nil
         )
     }
 }

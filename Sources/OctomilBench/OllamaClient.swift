@@ -53,27 +53,26 @@ public actor OllamaClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["name": id])
-        request.timeoutInterval = 600  // models can be large
+        request.timeoutInterval = 600
 
         let (bytes, _) = try await session.bytes(for: request)
-        // Consume the stream to completion (Ollama streams pull progress)
         for try await _ in bytes.lines {}
     }
 
-    // MARK: - Generate (non-streaming)
+    // MARK: - Chat Response
 
-    public struct GenerateResponse: Codable, Sendable {
+    public struct ChatResponse: Codable, Sendable {
         public let model: String
-        public let response: String
-        public let totalDuration: Int64?         // nanoseconds
-        public let loadDuration: Int64?          // nanoseconds
+        public let message: ChatMessage
+        public let totalDuration: Int64?
+        public let loadDuration: Int64?
         public let promptEvalCount: Int?
-        public let promptEvalDuration: Int64?    // nanoseconds
+        public let promptEvalDuration: Int64?
         public let evalCount: Int?
-        public let evalDuration: Int64?          // nanoseconds
+        public let evalDuration: Int64?
 
         enum CodingKeys: String, CodingKey {
-            case model, response
+            case model, message
             case totalDuration = "total_duration"
             case loadDuration = "load_duration"
             case promptEvalCount = "prompt_eval_count"
@@ -83,14 +82,21 @@ public actor OllamaClient {
         }
     }
 
-    public func generate(
+    public struct ChatMessage: Codable, Sendable {
+        public let role: String
+        public let content: String
+    }
+
+    // MARK: - Chat (non-streaming)
+
+    public func chat(
         model: String,
         prompt: String,
         maxTokens: Int = 128,
         temperature: Double = 0.0,
         topP: Double = 0.9
-    ) async throws -> GenerateResponse {
-        let url = baseURL.appendingPathComponent("api/generate")
+    ) async throws -> ChatResponse {
+        let url = baseURL.appendingPathComponent("api/chat")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -98,7 +104,9 @@ public actor OllamaClient {
 
         let body: [String: Any] = [
             "model": model,
-            "prompt": prompt,
+            "messages": [
+                ["role": "user", "content": prompt]
+            ],
             "stream": false,
             "options": [
                 "num_predict": maxTokens,
@@ -111,9 +119,10 @@ public actor OllamaClient {
         let (data, httpResponse) = try await session.data(for: request)
         guard let status = (httpResponse as? HTTPURLResponse)?.statusCode, status == 200 else {
             let body = String(data: data, encoding: .utf8) ?? "unknown"
-            throw OllamaError.requestFailed(status: (httpResponse as? HTTPURLResponse)?.statusCode ?? 0, body: body)
+            throw OllamaError.requestFailed(
+                status: (httpResponse as? HTTPURLResponse)?.statusCode ?? 0, body: body)
         }
-        return try JSONDecoder().decode(GenerateResponse.self, from: data)
+        return try JSONDecoder().decode(ChatResponse.self, from: data)
     }
 
     public enum OllamaError: Error, LocalizedError {
