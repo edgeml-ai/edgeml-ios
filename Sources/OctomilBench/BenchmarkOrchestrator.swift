@@ -69,10 +69,10 @@ public struct BenchmarkOrchestrator: Sendable {
                         topP: topP
                     )
                     results.append(result)
-                    print("  [mlx] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s")
+                    print("  [octomil] Done: \(String(format: "%.1f", result.result.tokensPerSecond)) tok/s")
                 } catch {
-                    print("  [mlx] FAILED: \(error.localizedDescription)")
-                    results.append(errorResult(engine: "mlx", model: model, error: error))
+                    print("  [octomil] FAILED: \(error.localizedDescription)")
+                    results.append(errorResult(engine: "octomil", model: model, error: error))
                 }
             }
 
@@ -108,10 +108,10 @@ public struct BenchmarkOrchestrator: Sendable {
             maxTokens: maxTokens,
             temperature: temperature,
             topP: topP,
-            prefillStepSize: engine == "mlx" ? 4096 : nil,
-            cacheEnabled: engine == "mlx" ? true : nil,
-            gpuCacheLimitMb: engine == "mlx" ? 2048 : nil,
-            quantization: engine == "mlx" ? "4bit" : "q4_0"
+            prefillStepSize: engine == "octomil" ? 4096 : nil,
+            cacheEnabled: engine == "octomil" ? true : nil,
+            gpuCacheLimitMb: engine == "octomil" ? 2048 : nil,
+            quantization: engine == "octomil" ? "4bit" : "q4_0"
         )
 
         return ModelBenchmarkResult(

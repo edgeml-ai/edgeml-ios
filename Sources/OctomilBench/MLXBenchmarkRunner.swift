@@ -22,7 +22,7 @@ public struct MLXBenchmarkRunner: Sendable {
     ) async throws -> ModelBenchmarkResult {
         let loader = MLXModelLoader(gpuCacheLimit: 2 * 1024 * 1024 * 1024)
 
-        print("  [mlx] Loading \(model.mlxId)...")
+        print("  [octomil] Loading \(model.mlxId)...")
         let container = try await loader.loadFromHub(modelId: model.mlxId)
 
         var allIterations: [IterationResult] = []
@@ -31,7 +31,7 @@ public struct MLXBenchmarkRunner: Sendable {
         var kvCacheTtft2: Double?
 
         // --- Cold run (first ever generation) ---
-        print("  [mlx] Cold run...")
+        print("  [octomil] Cold run...")
         let coldResult = try await runSingleIteration(
             container: container,
             prompt: prompt,
@@ -45,7 +45,7 @@ public struct MLXBenchmarkRunner: Sendable {
 
         // --- Warmup iterations (discarded) ---
         for w in 0..<warmup {
-            print("  [mlx] Warmup \(w + 1)/\(warmup)...")
+            print("  [octomil] Warmup \(w + 1)/\(warmup)...")
             _ = try await runSingleIteration(
                 container: container,
                 prompt: prompt,
@@ -59,7 +59,7 @@ public struct MLXBenchmarkRunner: Sendable {
 
         // --- Measured iterations ---
         for i in 0..<iterations {
-            print("  [mlx] Iteration \(i + 1)/\(iterations)...")
+            print("  [octomil] Iteration \(i + 1)/\(iterations)...")
             let result = try await runSingleIteration(
                 container: container,
                 prompt: prompt,
@@ -73,7 +73,7 @@ public struct MLXBenchmarkRunner: Sendable {
         }
 
         // --- KV cache measurement: same prompt twice with cache enabled ---
-        print("  [mlx] KV cache test (run 1)...")
+        print("  [octomil] KV cache test (run 1)...")
         let cacheEngine1 = MLXLLMEngine(
             modelContainer: container,
             maxTokens: maxTokens,
@@ -88,7 +88,7 @@ public struct MLXBenchmarkRunner: Sendable {
         )
         kvCacheTtft1 = cacheResult1.ttftMs
 
-        print("  [mlx] KV cache test (run 2, cache reuse)...")
+        print("  [octomil] KV cache test (run 2, cache reuse)...")
         let cacheResult2 = try await runWithEngine(
             engine: cacheEngine1,
             prompt: prompt,
@@ -113,7 +113,7 @@ public struct MLXBenchmarkRunner: Sendable {
         await loader.evictAll()
 
         let benchResult = BenchmarkResult(
-            engineName: "mlx",
+            engineName: "octomil",
             tokensPerSecond: avgTokS,
             ttftMs: avgTtft,
             memoryMb: memMb,
@@ -132,7 +132,7 @@ public struct MLXBenchmarkRunner: Sendable {
         )
 
         return ModelBenchmarkResult(
-            engine: "mlx",
+            engine: "octomil",
             model: model,
             result: benchResult,
             params: params,

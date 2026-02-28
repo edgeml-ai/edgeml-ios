@@ -31,10 +31,10 @@ struct OctomilBench: AsyncParsableCommand {
     @Option(name: .long, help: "Custom prompt text.")
     var prompt: String = "Explain the theory of general relativity in simple terms."
 
-    @Flag(name: .long, help: "Skip Ollama benchmarks (MLX only).")
+    @Flag(name: .long, help: "Skip Ollama benchmarks (Octomil only).")
     var skipOllama: Bool = false
 
-    @Flag(name: .long, help: "Skip MLX benchmarks (Ollama only).")
+    @Flag(name: .long, help: "Skip Octomil benchmarks (Ollama only).")
     var skipMlx: Bool = false
 
     @Flag(name: .long, help: "Auto-pull missing Ollama models.")
