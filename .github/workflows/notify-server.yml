@@ -27,7 +27,7 @@ jobs:
         run: echo "version=$(grep 'current = ' Sources/Octomil/Version.swift | sed 's/.*"\(.*\)".*/\1/')" >> $GITHUB_OUTPUT
 
       - name: Dispatch to server
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
           repository: octomil/octomil-server
