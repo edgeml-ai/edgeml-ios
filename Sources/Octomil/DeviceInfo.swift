@@ -64,40 +64,27 @@ public class DeviceMetadata {
         #endif
     }
 
-    /// Maps this device to an Octomil server device profile key.
+    /// Resolves this device's profile key using the ``DeviceProfileClient``.
     ///
-    /// The server uses these keys to select the optimal model format,
+    /// The server uses profile keys to select the optimal model format,
     /// quantization settings, and MNN runtime config for the device.
+    /// When the server mapping is unavailable, falls back to a RAM-based
+    /// tier classification (high/mid/low) with no hardcoded device IDs.
     ///
-    /// - Returns: Device profile key (e.g. "iphone_15_pro", "iphone_14").
+    /// - Parameter profileClient: The client that fetches and caches server profiles.
+    /// - Returns: Device profile key (e.g. "iphone_15_pro", "high", "mid").
+    public func resolveDeviceProfile(using profileClient: DeviceProfileClient) async -> String {
+        let memoryMB = totalMemoryMB ?? 4096 // Conservative default if unknown
+        return await profileClient.resolveProfile(machineId: model, totalMemoryMB: memoryMB)
+    }
+
+    /// RAM-only fallback profile classification when no ``DeviceProfileClient`` is available.
+    ///
+    /// Returns a generic tier string based on available RAM. No hardcoded device
+    /// model identifiers are used.
     public var deviceProfile: String {
-        let model = self.model.lowercased()
-
-        // iPhone 15 Pro / Pro Max (A17 Pro, 8GB)
-        // Machine IDs: iPhone16,1 (15 Pro) iPhone16,2 (15 Pro Max)
-        if model.contains("iphone16,1") || model.contains("iphone16,2") {
-            return "iphone_15_pro"
-        }
-
-        // iPhone 16 Pro / Pro Max (A18 Pro, 8GB) — map to 15 Pro tier
-        // Machine IDs: iPhone17,1 (16 Pro) iPhone17,2 (16 Pro Max)
-        if model.contains("iphone17,1") || model.contains("iphone17,2") {
-            return "iphone_15_pro"
-        }
-
-        // iPhone 15 / 15 Plus (A16, 6GB)
-        // iPhone 16 / 16 Plus (A18, 8GB) — still map to iphone_14 tier for non-Pro
-        if model.contains("iphone15,") || model.contains("iphone16,") || model.contains("iphone17,") {
-            return "iphone_14"
-        }
-
-        // iPhone 14 family (A15/A16, 6GB)
-        if model.contains("iphone14,") {
-            return "iphone_14"
-        }
-
-        // Older or unknown iPhones — conservative fallback
-        return "iphone_14"
+        let memoryMB = totalMemoryMB ?? 4096
+        return DeviceRAMTier.classify(totalMemoryMB: memoryMB).rawValue
     }
 
     /// Get CPU architecture (arm64)
