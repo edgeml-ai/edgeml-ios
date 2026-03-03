@@ -12,6 +12,7 @@ public actor ModelManager {
     private let modelCache: any ModelCaching
     private let configuration: OctomilConfiguration
     private let formatClient: ModelFormatClient?
+    private let profileClient: DeviceProfileClient?
     private let logger: Logger
     private let fileManager = FileManager.default
     private let deviceMetadata = DeviceMetadata()
@@ -25,11 +26,18 @@ public actor ModelManager {
     ///   - apiClient: API client for server communication.
     ///   - configuration: SDK configuration.
     ///   - formatClient: Client for fetching server-recommended model format. Pass `nil` to use "auto".
-    internal init(apiClient: APIClient, configuration: OctomilConfiguration, formatClient: ModelFormatClient? = nil) {
+    ///   - profileClient: Client for fetching server-provided device profiles. Pass `nil` to use RAM-based fallback.
+    internal init(
+        apiClient: APIClient,
+        configuration: OctomilConfiguration,
+        formatClient: ModelFormatClient? = nil,
+        profileClient: DeviceProfileClient? = nil
+    ) {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = ModelCache(maxSize: configuration.maxCacheSize)
         self.formatClient = formatClient
+        self.profileClient = profileClient
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelManager")
     }
 
@@ -39,11 +47,19 @@ public actor ModelManager {
     ///   - configuration: SDK configuration.
     ///   - modelCache: Cache implementation.
     ///   - formatClient: Client for fetching server-recommended model format. Pass `nil` to use "auto".
-    internal init(apiClient: APIClient, configuration: OctomilConfiguration, modelCache: any ModelCaching, formatClient: ModelFormatClient? = nil) {
+    ///   - profileClient: Client for fetching server-provided device profiles. Pass `nil` to use RAM-based fallback.
+    internal init(
+        apiClient: APIClient,
+        configuration: OctomilConfiguration,
+        modelCache: any ModelCaching,
+        formatClient: ModelFormatClient? = nil,
+        profileClient: DeviceProfileClient? = nil
+    ) {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = modelCache
         self.formatClient = formatClient
+        self.profileClient = profileClient
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelManager")
     }
 
@@ -89,8 +105,13 @@ public actor ModelManager {
             // Get metadata
             let metadata = try await apiClient.getModelMetadata(modelId: modelId, version: version)
 
-            // Auto-detect device profile for optimal format selection
-            let deviceProfile = self.deviceMetadata.deviceProfile
+            // Resolve device profile: server-provided mapping if available, else RAM-based tier
+            let deviceProfile: String
+            if let profileClient = self.profileClient {
+                deviceProfile = await self.deviceMetadata.resolveDeviceProfile(using: profileClient)
+            } else {
+                deviceProfile = self.deviceMetadata.deviceProfile
+            }
 
             // Get server-recommended format (falls back to "auto" if unreachable)
             let format: String
