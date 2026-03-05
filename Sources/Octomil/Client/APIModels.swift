@@ -499,6 +499,54 @@ public struct VersionResolutionResponse: Codable, Sendable {
     }
 }
 
+/// Request body for model format resolution.
+public struct ModelResolveRequest: Codable, Sendable {
+    public let platform: String
+    public let model: String?
+    public let manufacturer: String?
+    public let cpuArchitecture: String?
+    public let osVersion: String?
+    public let totalMemoryMb: Int?
+    public let gpuAvailable: Bool
+    public let npuAvailable: Bool
+    public let supportedRuntimes: [String]
+    public let computeUnits: String?
+
+    enum CodingKeys: String, CodingKey {
+        case platform
+        case model
+        case manufacturer
+        case cpuArchitecture = "cpu_architecture"
+        case osVersion = "os_version"
+        case totalMemoryMb = "total_memory_mb"
+        case gpuAvailable = "gpu_available"
+        case npuAvailable = "npu_available"
+        case supportedRuntimes = "supported_runtimes"
+        case computeUnits = "compute_units"
+    }
+}
+
+/// Response from POST /api/v1/models/{model_id}/versions/{version}/resolve.
+public struct ModelResolveResponse: Codable, Sendable {
+    public let modelId: String
+    public let version: String
+    public let format: String
+    public let quantization: String?
+    public let executor: String?
+    public let downloadUrl: String
+    public let availableFormats: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case modelId = "model_id"
+        case version
+        case format
+        case quantization
+        case executor
+        case downloadUrl = "download_url"
+        case availableFormats = "available_formats"
+    }
+}
+
 /// Response with download URL.
 public struct DownloadURLResponse: Codable, Sendable {
     /// Pre-signed download URL.

@@ -113,20 +113,49 @@ public actor ModelManager {
                 deviceProfile = self.deviceMetadata.deviceProfile
             }
 
-            // Get server-recommended format (falls back to "auto" if unreachable)
-            let format: String
-            if let formatClient = self.formatClient {
-                format = await formatClient.getFormat(modelId: modelId)
-            } else {
-                format = "auto"
-            }
-
-            // Get download URL using server-recommended format
-            let downloadInfo = try await apiClient.getDownloadURL(
-                modelId: modelId,
-                version: version,
-                format: format
+            // Resolve optimal model format from device capabilities.
+            let resolveRequest = ModelResolveRequest(
+                platform: "ios",
+                model: self.deviceMetadata.model,
+                manufacturer: self.deviceMetadata.manufacturer,
+                cpuArchitecture: self.deviceMetadata.cpuArchitecture,
+                osVersion: self.deviceMetadata.osVersion,
+                totalMemoryMb: self.deviceMetadata.totalMemoryMB,
+                gpuAvailable: self.deviceMetadata.gpuAvailable,
+                npuAvailable: self.deviceMetadata.gpuAvailable,
+                supportedRuntimes: ["coreml"],
+                computeUnits: "all"
             )
+
+            let resolvedFormat: String
+            let downloadInfo: DownloadURLResponse
+            do {
+                let resolution = try await apiClient.resolveModelFormat(
+                    modelId: modelId,
+                    version: version,
+                    capabilities: resolveRequest
+                )
+                resolvedFormat = resolution.format
+                downloadInfo = try await apiClient.getDownloadURL(
+                    modelId: modelId,
+                    version: resolution.version,
+                    format: resolvedFormat
+                )
+            } catch {
+                // Fall back to legacy format lookup path if resolve is unavailable.
+                let format: String
+                if let formatClient = self.formatClient {
+                    format = await formatClient.getFormat(modelId: modelId)
+                } else {
+                    format = "auto"
+                }
+                resolvedFormat = format
+                downloadInfo = try await apiClient.getDownloadURL(
+                    modelId: modelId,
+                    version: version,
+                    format: format
+                )
+            }
 
             guard let downloadURL = URL(string: downloadInfo.url) else {
                 throw OctomilError.invalidRequest(reason: "Invalid download URL")

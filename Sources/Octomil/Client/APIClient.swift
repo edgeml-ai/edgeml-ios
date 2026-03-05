@@ -176,6 +176,26 @@ public actor APIClient {
         return try await performRequest(urlRequest)
     }
 
+    /// Resolve optimal model format for the current device capabilities.
+    /// - Parameters:
+    ///   - modelId: Model identifier.
+    ///   - version: Model version.
+    ///   - capabilities: Device capability payload.
+    /// - Returns: Resolved model format and download metadata.
+    public func resolveModelFormat(
+        modelId: String,
+        version: String,
+        capabilities: ModelResolveRequest
+    ) async throws -> ModelResolveResponse {
+        let url = serverURL.appendingPathComponent("api/v1/models/\(modelId)/versions/\(version)/resolve")
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        try configureHeaders(&urlRequest)
+        urlRequest.httpBody = try jsonEncoder.encode(capabilities)
+        return try await performRequest(urlRequest)
+    }
+
     /// Gets model metadata.
     /// - Parameters:
     ///   - modelId: Model identifier.
