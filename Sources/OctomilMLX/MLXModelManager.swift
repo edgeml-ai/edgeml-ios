@@ -13,7 +13,7 @@ import Octomil
 public actor MLXModelManager {
 
     private let apiClient: APIClient
-    private let formatClient: ModelFormatClient?
+    private let deviceMetadata = DeviceMetadata()
     private let loader: MLXModelLoader
     private let fileManager = FileManager.default
     private var downloadTasks: [String: Task<MLXDeployedModel, Error>] = [:]
@@ -21,12 +21,9 @@ public actor MLXModelManager {
     /// Creates an MLX model manager.
     /// - Parameters:
     ///   - apiClient: API client for server communication.
-    ///   - formatClient: Client for fetching server-recommended model format.
-    ///     Pass `nil` to use "auto" (let the server resolve).
     ///   - gpuCacheLimit: GPU memory cache limit in bytes (default: 512 MB).
-    public init(apiClient: APIClient, formatClient: ModelFormatClient? = nil, gpuCacheLimit: Int = 512 * 1024 * 1024) {
+    public init(apiClient: APIClient, gpuCacheLimit: Int = 512 * 1024 * 1024) {
         self.apiClient = apiClient
-        self.formatClient = formatClient
         self.loader = MLXModelLoader(gpuCacheLimit: gpuCacheLimit)
     }
 
@@ -56,18 +53,28 @@ public actor MLXModelManager {
                 Task { await self.removeDownloadTask(cacheKey) }
             }
 
-            // Get server-recommended format (falls back to "auto" if unreachable)
-            let format: String
-            if let formatClient = self.formatClient {
-                format = await formatClient.getFormat(modelId: modelId)
-            } else {
-                format = "auto"
-            }
+            // Resolve the best format for this device from capability payload.
+            let resolution = try await apiClient.resolveModelFormat(
+                modelId: modelId,
+                version: version,
+                capabilities: ModelResolveRequest(
+                    platform: "ios",
+                    model: self.deviceMetadata.model,
+                    manufacturer: self.deviceMetadata.manufacturer,
+                    cpuArchitecture: self.deviceMetadata.cpuArchitecture,
+                    osVersion: self.deviceMetadata.osVersion,
+                    totalMemoryMb: self.deviceMetadata.totalMemoryMB,
+                    gpuAvailable: self.deviceMetadata.gpuAvailable,
+                    npuAvailable: self.deviceMetadata.gpuAvailable,
+                    supportedRuntimes: ["mlx", "coreml"],
+                    computeUnits: "all"
+                )
+            )
 
             let downloadInfo = try await apiClient.getDownloadURL(
                 modelId: modelId,
-                version: version,
-                format: format
+                version: resolution.version,
+                format: resolution.format
             )
 
             guard let downloadURL = URL(string: downloadInfo.url) else {

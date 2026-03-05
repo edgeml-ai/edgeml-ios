@@ -11,7 +11,6 @@ public actor ModelManager {
     private let apiClient: APIClient
     private let modelCache: any ModelCaching
     private let configuration: OctomilConfiguration
-    private let formatClient: ModelFormatClient?
     private let profileClient: DeviceProfileClient?
     private let logger: Logger
     private let fileManager = FileManager.default
@@ -25,18 +24,15 @@ public actor ModelManager {
     /// - Parameters:
     ///   - apiClient: API client for server communication.
     ///   - configuration: SDK configuration.
-    ///   - formatClient: Client for fetching server-recommended model format. Pass `nil` to use "auto".
     ///   - profileClient: Client for fetching server-provided device profiles. Pass `nil` to use RAM-based fallback.
     internal init(
         apiClient: APIClient,
         configuration: OctomilConfiguration,
-        formatClient: ModelFormatClient? = nil,
         profileClient: DeviceProfileClient? = nil
     ) {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = ModelCache(maxSize: configuration.maxCacheSize)
-        self.formatClient = formatClient
         self.profileClient = profileClient
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelManager")
     }
@@ -46,19 +42,16 @@ public actor ModelManager {
     ///   - apiClient: API client for server communication.
     ///   - configuration: SDK configuration.
     ///   - modelCache: Cache implementation.
-    ///   - formatClient: Client for fetching server-recommended model format. Pass `nil` to use "auto".
     ///   - profileClient: Client for fetching server-provided device profiles. Pass `nil` to use RAM-based fallback.
     internal init(
         apiClient: APIClient,
         configuration: OctomilConfiguration,
         modelCache: any ModelCaching,
-        formatClient: ModelFormatClient? = nil,
         profileClient: DeviceProfileClient? = nil
     ) {
         self.apiClient = apiClient
         self.configuration = configuration
         self.modelCache = modelCache
-        self.formatClient = formatClient
         self.profileClient = profileClient
         self.logger = Logger(subsystem: "ai.octomil.sdk", category: "ModelManager")
     }
@@ -127,35 +120,17 @@ public actor ModelManager {
                 computeUnits: "all"
             )
 
-            let resolvedFormat: String
-            let downloadInfo: DownloadURLResponse
-            do {
-                let resolution = try await apiClient.resolveModelFormat(
-                    modelId: modelId,
-                    version: version,
-                    capabilities: resolveRequest
-                )
-                resolvedFormat = resolution.format
-                downloadInfo = try await apiClient.getDownloadURL(
-                    modelId: modelId,
-                    version: resolution.version,
-                    format: resolvedFormat
-                )
-            } catch {
-                // Fall back to legacy format lookup path if resolve is unavailable.
-                let format: String
-                if let formatClient = self.formatClient {
-                    format = await formatClient.getFormat(modelId: modelId)
-                } else {
-                    format = "auto"
-                }
-                resolvedFormat = format
-                downloadInfo = try await apiClient.getDownloadURL(
-                    modelId: modelId,
-                    version: version,
-                    format: format
-                )
-            }
+            let resolution = try await apiClient.resolveModelFormat(
+                modelId: modelId,
+                version: version,
+                capabilities: resolveRequest
+            )
+            let resolvedFormat = resolution.format
+            let downloadInfo = try await apiClient.getDownloadURL(
+                modelId: modelId,
+                version: resolution.version,
+                format: resolvedFormat
+            )
 
             guard let downloadURL = URL(string: downloadInfo.url) else {
                 throw OctomilError.invalidRequest(reason: "Invalid download URL")
