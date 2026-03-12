@@ -30,7 +30,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.25.4"),
-        .package(url: "https://github.com/kunal732/MLX-Swift-TS", branch: "main"),
+        .package(url: "https://github.com/kunal732/MLX-Swift-TS", revision: "8659cf20c4382e94233e4de287e68f6e575fef23"),
     ],
     targets: [
         .target(
