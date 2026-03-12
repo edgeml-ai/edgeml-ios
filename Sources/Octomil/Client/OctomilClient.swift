@@ -169,12 +169,16 @@ public final class OctomilClient: @unchecked Sendable {
     /// - Parameters:
     ///   - apiKey: API key for authenticating with the Octomil server.
     ///   - orgId: Organization identifier.
+    ///   - deviceId: Optional stable device identifier (e.g., IDFV). When provided,
+    ///     this is used as the default for ``register(deviceId:appVersion:metadata:)``
+    ///     and is forwarded to the telemetry resource context.
     ///   - serverURL: Base URL of the Octomil server.
     ///   - configuration: SDK configuration options.
     ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
     public convenience init(
         apiKey: String,
         orgId: String,
+        deviceId: String? = nil,
         serverURL: URL = OctomilClient.defaultServerURL,
         configuration: OctomilConfiguration = .standard,
         heartbeatInterval: TimeInterval = 300
@@ -182,6 +186,7 @@ public final class OctomilClient: @unchecked Sendable {
         self.init(
             deviceAccessToken: apiKey,
             orgId: orgId,
+            deviceId: deviceId,
             serverURL: serverURL,
             configuration: configuration,
             heartbeatInterval: heartbeatInterval
@@ -191,18 +196,22 @@ public final class OctomilClient: @unchecked Sendable {
     /// Creates a new Octomil client using a device access token.
     ///
     /// This initializer is retained for backward compatibility.
-    /// Prefer ``init(apiKey:orgId:serverURL:configuration:heartbeatInterval:)``
+    /// Prefer ``init(apiKey:orgId:deviceId:serverURL:configuration:heartbeatInterval:)``
     /// for new integrations.
     ///
     /// - Parameters:
     ///   - deviceAccessToken: Short-lived device access token from backend bootstrap flow.
     ///   - orgId: Organization identifier.
+    ///   - deviceId: Optional stable device identifier (e.g., IDFV). When provided,
+    ///     this is used as the default for ``register(deviceId:appVersion:metadata:)``
+    ///     and is forwarded to the telemetry resource context.
     ///   - serverURL: Base URL of the Octomil server.
     ///   - configuration: SDK configuration options.
     ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
     public init(
         deviceAccessToken: String,
         orgId: String,
+        deviceId: String? = nil,
         serverURL: URL = OctomilClient.defaultServerURL,
         configuration: OctomilConfiguration = .standard,
         heartbeatInterval: TimeInterval = 300
@@ -240,6 +249,13 @@ public final class OctomilClient: @unchecked Sendable {
         // Try to restore server device ID from keychain
         if let storedId = try? secureStorage.getServerDeviceId() {
             self.serverDeviceId = storedId
+        }
+
+        // Apply constructor-provided deviceId
+        if let deviceId {
+            self.clientDeviceIdentifier = deviceId
+            // Forward to telemetry resource context so events carry the device ID
+            TelemetryQueue.shared?.setResourceContext(deviceId: deviceId, orgId: orgId)
         }
 
         // Set as shared instance
@@ -294,13 +310,13 @@ public final class OctomilClient: @unchecked Sendable {
     /// participation in federated learning rounds.
     ///
     /// - Parameters:
-    ///   - deviceIdentifier: Client-generated device ID (e.g., IDFV). If nil, auto-generated.
+    ///   - deviceId: Client-generated device ID (e.g., IDFV). If nil, auto-generated.
     ///   - appVersion: Host application version.
     ///   - metadata: Optional additional metadata.
     /// - Returns: Registration information including server-assigned ID.
     /// - Throws: `OctomilError` if registration fails.
     public func register(
-        deviceIdentifier: String? = nil,
+        deviceId: String? = nil,
         appVersion: String? = nil,
         metadata: [String: String]? = nil
     ) async throws -> DeviceRegistrationResponse {
@@ -310,8 +326,9 @@ public final class OctomilClient: @unchecked Sendable {
             logger.info("Registering device...")
         }
 
-        // Generate or use provided device identifier
-        let identifier = deviceIdentifier ?? generateDeviceIdentifier()
+        // Generate or use provided device identifier.
+        // Priority: register() parameter > constructor deviceId > auto-generated
+        let identifier = deviceId ?? self.clientDeviceIdentifier ?? generateDeviceIdentifier()
         self.clientDeviceIdentifier = identifier
 
         let deviceInfo = await buildDeviceInfo()
@@ -367,6 +384,18 @@ public final class OctomilClient: @unchecked Sendable {
         }
 
         return registration
+    }
+
+    /// Registers this device with the Octomil server.
+    ///
+    /// - Note: Deprecated. Use ``register(deviceId:appVersion:metadata:)`` instead.
+    @available(*, deprecated, renamed: "register(deviceId:appVersion:metadata:)")
+    public func register(
+        deviceIdentifier: String? = nil,
+        appVersion: String? = nil,
+        metadata: [String: String]? = nil
+    ) async throws -> DeviceRegistrationResponse {
+        try await register(deviceId: deviceIdentifier, appVersion: appVersion, metadata: metadata)
     }
 
     // MARK: - Heartbeat
