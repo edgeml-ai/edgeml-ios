@@ -73,6 +73,9 @@ public final class OctomilClient: @unchecked Sendable {
         deviceIdProvider: { [weak self] in self?.deviceId }
     )
 
+    /// Device capabilities and hardware profile.
+    public private(set) lazy var capabilities = CapabilitiesClient()
+
     /// Response API for on-device LLM inference.
     public private(set) lazy var responses = OctomilResponses()
 
