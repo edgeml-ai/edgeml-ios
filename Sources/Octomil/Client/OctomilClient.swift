@@ -152,7 +152,41 @@ public final class OctomilClient: @unchecked Sendable {
 
     // MARK: - Initialization
 
-    /// Creates a new Octomil client.
+    /// Creates a new Octomil client using an API key.
+    ///
+    /// This is the recommended initializer. The `apiKey` is used for all
+    /// server communication. If you are migrating from the older
+    /// ``init(deviceAccessToken:orgId:serverURL:configuration:heartbeatInterval:)``
+    /// initializer, pass the same token here.
+    ///
+    /// - Parameters:
+    ///   - apiKey: API key for authenticating with the Octomil server.
+    ///   - orgId: Organization identifier.
+    ///   - serverURL: Base URL of the Octomil server.
+    ///   - configuration: SDK configuration options.
+    ///   - heartbeatInterval: Interval for automatic heartbeats (default: 5 minutes).
+    public convenience init(
+        apiKey: String,
+        orgId: String,
+        serverURL: URL = OctomilClient.defaultServerURL,
+        configuration: OctomilConfiguration = .standard,
+        heartbeatInterval: TimeInterval = 300
+    ) {
+        self.init(
+            deviceAccessToken: apiKey,
+            orgId: orgId,
+            serverURL: serverURL,
+            configuration: configuration,
+            heartbeatInterval: heartbeatInterval
+        )
+    }
+
+    /// Creates a new Octomil client using a device access token.
+    ///
+    /// This initializer is retained for backward compatibility.
+    /// Prefer ``init(apiKey:orgId:serverURL:configuration:heartbeatInterval:)``
+    /// for new integrations.
+    ///
     /// - Parameters:
     ///   - deviceAccessToken: Short-lived device access token from backend bootstrap flow.
     ///   - orgId: Organization identifier.
