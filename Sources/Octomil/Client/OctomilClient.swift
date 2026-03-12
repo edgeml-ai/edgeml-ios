@@ -68,6 +68,9 @@ public final class OctomilClient: @unchecked Sendable {
     /// Response API for on-device LLM inference.
     public private(set) lazy var responses = OctomilResponses()
 
+    /// Control-plane sync for configuration, assignments, and rollouts.
+    public private(set) lazy var control = ControlSync(apiClient: apiClient)
+
     /// Offline event queue for offline-first event persistence.
     private let eventQueue: EventQueue
 

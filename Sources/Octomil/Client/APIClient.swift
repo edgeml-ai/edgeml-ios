@@ -473,15 +473,21 @@ public actor APIClient {
     // MARK: - V2 Telemetry
 
     /// Sends a batch of telemetry events to the v2 OTLP endpoint.
-    /// - Parameter envelope: The v2 OTLP telemetry envelope.
+    /// - Parameter envelope: The v2 OTLP telemetry envelope (legacy format, converted to OTLP on send).
     public func reportTelemetryEvents(_ envelope: TelemetryEnvelope) async throws {
+        try await reportTelemetryOTLP(envelope.toOTLP())
+    }
+
+    /// Sends an OTLP ExportLogsServiceRequest to the v2 telemetry endpoint.
+    /// - Parameter request: The OTLP payload.
+    public func reportTelemetryOTLP(_ request: ExportLogsServiceRequest) async throws {
         let url = serverURL.appendingPathComponent("api/v2/telemetry/events")
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         try configureHeaders(&urlRequest)
-        urlRequest.httpBody = try jsonEncoder.encode(envelope)
+        urlRequest.httpBody = try jsonEncoder.encode(request)
 
         let _: EmptyResponse = try await performRequest(urlRequest)
     }

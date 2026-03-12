@@ -1,12 +1,12 @@
 import Foundation
 
-/// OpenAI-compatible chat interface for on-device inference.
+/// OpenAI-compatible chat interface — **compatibility shim** over ``OctomilResponses``.
 ///
-/// Drop-in replacement for OpenAI/Groq client calls — same message format,
-/// same response shapes, same streaming semantics. Runs entirely on-device.
+/// All inference is delegated to the Response API. This class converts
+/// `ChatRequest` / `ChatCompletion` to and from the Response API types.
 ///
 /// ```swift
-/// let chat = OctomilChat(modelName: "phi-4-mini", engine: engine)
+/// let chat = OctomilChat(modelName: "phi-4-mini", responses: responses)
 ///
 /// // Non-streaming:
 /// let response = try await chat.create("What is ML?")
@@ -21,13 +21,18 @@ public final class OctomilChat: @unchecked Sendable {
     /// The logical model name.
     public let modelName: String
 
-    private let engine: StreamingInferenceEngine
-    private let runtime: LLMRuntime?
+    private let responses: OctomilResponses
 
+    // Legacy init kept for backward compatibility (engine/runtime are ignored;
+    // all inference goes through OctomilResponses).
     public init(modelName: String, engine: StreamingInferenceEngine, runtime: LLMRuntime? = nil) {
         self.modelName = modelName
-        self.engine = engine
-        self.runtime = runtime
+        self.responses = OctomilResponses()
+    }
+
+    public init(modelName: String, responses: OctomilResponses) {
+        self.modelName = modelName
+        self.responses = responses
     }
 
     // MARK: - Non-streaming
@@ -36,55 +41,9 @@ public final class OctomilChat: @unchecked Sendable {
     ///
     /// Equivalent to OpenAI's `client.chat.completions.create(stream: false)`.
     public func create(_ request: ChatRequest) async throws -> ChatCompletion {
-        let completionId = "chatcmpl-\(UUID().uuidString.prefix(12))"
-        let prompt = formatPrompt(request)
-        let config = GenerateConfig(
-            maxTokens: request.maxTokens,
-            temperature: request.temperature,
-            topP: request.topP,
-            stop: request.stop
-        )
-        var tokens: [String] = []
-
-        if let runtime = runtime {
-            for try await token in runtime.generate(prompt: prompt, config: config) {
-                tokens.append(token)
-            }
-        } else {
-            for try await chunk in engine.generate(input: prompt, modality: .text) {
-                tokens.append(String(data: chunk.data, encoding: .utf8) ?? "")
-            }
-        }
-
-        let fullContent = tokens.joined()
-        let toolCalls = extractToolCalls(content: fullContent, tools: request.tools)
-        let finishReason = toolCalls != nil ? "tool_calls" : "stop"
-
-        let message: ChatMessage
-        if let toolCalls = toolCalls {
-            message = ChatMessage(role: .assistant, toolCalls: toolCalls)
-        } else {
-            message = .assistant(fullContent)
-        }
-
-        return ChatCompletion(
-            id: completionId,
-            object: "chat.completion",
-            created: Int(Date().timeIntervalSince1970),
-            model: modelName,
-            choices: [
-                ChatCompletion.Choice(
-                    index: 0,
-                    message: message,
-                    finishReason: finishReason
-                ),
-            ],
-            usage: ChatCompletion.Usage(
-                promptTokens: estimateTokens(prompt),
-                completionTokens: tokens.count,
-                totalTokens: estimateTokens(prompt) + tokens.count
-            )
-        )
+        let responseRequest = Self.toResponseRequest(model: modelName, chat: request)
+        let response = try await responses.create(responseRequest)
+        return Self.toChatCompletion(response: response, model: modelName)
     }
 
     /// Convenience: create a completion from a single user message.
@@ -98,60 +57,74 @@ public final class OctomilChat: @unchecked Sendable {
     ///
     /// Equivalent to OpenAI's `client.chat.completions.create(stream: true)`.
     public func stream(_ request: ChatRequest) -> AsyncThrowingStream<ChatCompletionChunk, Error> {
+        let responseRequest = Self.toResponseRequest(model: modelName, chat: request, stream: true)
         let completionId = "chatcmpl-\(UUID().uuidString.prefix(12))"
         let created = Int(Date().timeIntervalSince1970)
-        let prompt = formatPrompt(request)
-        let config = GenerateConfig(
-            maxTokens: request.maxTokens,
-            temperature: request.temperature,
-            topP: request.topP,
-            stop: request.stop
-        )
         let modelName = self.modelName
-        let engine = self.engine
-        let runtime = self.runtime
+        let responseStream = responses.stream(responseRequest)
 
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     var isFirst = true
-
-                    if let runtime = runtime {
-                        for try await token in runtime.generate(prompt: prompt, config: config) {
-                            let chunk = Self.makeChunk(
-                                id: completionId, created: created, model: modelName,
-                                content: token, role: isFirst ? .assistant : nil
-                            )
-                            continuation.yield(chunk)
-                            isFirst = false
-                        }
-                    } else {
-                        for try await engineChunk in engine.generate(input: prompt, modality: .text) {
-                            let text = String(data: engineChunk.data, encoding: .utf8) ?? ""
+                    for try await event in responseStream {
+                        switch event {
+                        case .textDelta(let text):
                             let chunk = Self.makeChunk(
                                 id: completionId, created: created, model: modelName,
                                 content: text, role: isFirst ? .assistant : nil
                             )
                             continuation.yield(chunk)
                             isFirst = false
+
+                        case .toolCallDelta(let index, let id, let name, let argsDelta):
+                            let tc = ToolCall(
+                                id: id ?? "call_\(index)",
+                                function: FunctionCall(
+                                    name: name ?? "",
+                                    arguments: argsDelta ?? ""
+                                )
+                            )
+                            let chunk = ChatCompletionChunk(
+                                id: completionId,
+                                object: "chat.completion.chunk",
+                                created: created,
+                                model: modelName,
+                                choices: [
+                                    ChatCompletionChunk.ChunkChoice(
+                                        index: 0,
+                                        delta: ChatCompletionChunk.Delta(
+                                            role: isFirst ? .assistant : nil,
+                                            toolCalls: [tc]
+                                        ),
+                                        finishReason: nil
+                                    ),
+                                ]
+                            )
+                            continuation.yield(chunk)
+                            isFirst = false
+
+                        case .done(let response):
+                            let finishReason = response.finishReason == "tool_calls" ? "tool_calls" : "stop"
+                            let finalChunk = ChatCompletionChunk(
+                                id: completionId,
+                                object: "chat.completion.chunk",
+                                created: created,
+                                model: modelName,
+                                choices: [
+                                    ChatCompletionChunk.ChunkChoice(
+                                        index: 0,
+                                        delta: ChatCompletionChunk.Delta(),
+                                        finishReason: finishReason
+                                    ),
+                                ]
+                            )
+                            continuation.yield(finalChunk)
+
+                        case .error:
+                            break
                         }
                     }
-
-                    // Final chunk with finish_reason
-                    let finalChunk = ChatCompletionChunk(
-                        id: completionId,
-                        object: "chat.completion.chunk",
-                        created: created,
-                        model: modelName,
-                        choices: [
-                            ChatCompletionChunk.ChunkChoice(
-                                index: 0,
-                                delta: ChatCompletionChunk.Delta(),
-                                finishReason: "stop"
-                            ),
-                        ]
-                    )
-                    continuation.yield(finalChunk)
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -166,72 +139,97 @@ public final class OctomilChat: @unchecked Sendable {
         stream(ChatRequest(messages: [.user(message)]))
     }
 
-    // MARK: - Prompt formatting
+    // MARK: - Conversion: ChatRequest → ResponseRequest
 
-    func formatPrompt(_ request: ChatRequest) -> String {
-        var sb = ""
+    static func toResponseRequest(model: String, chat: ChatRequest, stream: Bool = false) -> ResponseRequest {
+        var input: [InputItem] = []
 
-        if let tools = request.tools, !tools.isEmpty {
-            sb += "<|system|>\nYou have access to the following tools:\n\n"
-            for tool in tools {
-                sb += "Function: \(tool.function.name)\n"
-                sb += "Description: \(tool.function.description)\n"
-                sb += "\n"
-            }
-            sb += "To use a tool, respond with JSON: {\"tool_call\": {\"name\": \"function_name\", \"arguments\": {...}}}\n\n"
-        }
-
-        for msg in request.messages {
+        for msg in chat.messages {
             switch msg.role {
-            case .system:    sb += "<|system|>\n\(msg.content ?? "")\n"
-            case .user:      sb += "<|user|>\n\(msg.content ?? "")\n"
-            case .assistant: sb += "<|assistant|>\n\(msg.content ?? "")\n"
-            case .tool:      sb += "<|tool|>\n\(msg.content ?? "")\n"
+            case .system:
+                input.append(.system(msg.content ?? ""))
+            case .user:
+                input.append(.text(msg.content ?? ""))
+            case .assistant:
+                if let toolCalls = msg.toolCalls, !toolCalls.isEmpty {
+                    let rtcs = toolCalls.map { ResponseToolCall.fromLegacy($0) }
+                    input.append(.assistant(content: [.text(msg.content ?? "")], toolCalls: rtcs))
+                } else {
+                    input.append(.assistant(content: [.text(msg.content ?? "")], toolCalls: nil))
+                }
+            case .tool:
+                input.append(.toolResult(toolCallId: msg.toolCallId ?? "", content: msg.content ?? ""))
             }
         }
 
-        sb += "<|assistant|>\n"
-        return sb
+        return ResponseRequest(
+            model: model,
+            input: input,
+            tools: chat.tools ?? [],
+            stream: stream,
+            maxOutputTokens: chat.maxTokens,
+            temperature: chat.temperature,
+            topP: chat.topP,
+            stop: chat.stop
+        )
     }
 
-    // MARK: - Tool call extraction
+    // MARK: - Conversion: Response → ChatCompletion
 
-    private func extractToolCalls(content: String, tools: [Tool]?) -> [ToolCall]? {
-        guard let tools = tools, !tools.isEmpty else { return nil }
-        let toolNames = Set(tools.map { $0.function.name })
+    static func toChatCompletion(response: Response, model: String) -> ChatCompletion {
+        let completionId = "chatcmpl-\(UUID().uuidString.prefix(12))"
 
-        guard let data = content.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let toolCallObj = json["tool_call"] as? [String: Any],
-              let name = toolCallObj["name"] as? String,
-              toolNames.contains(name) else {
-            return nil
-        }
+        var contentText: String?
+        var toolCalls: [ToolCall]?
 
-        let arguments: String
-        if let args = toolCallObj["arguments"] {
-            if let argsData = try? JSONSerialization.data(withJSONObject: args) {
-                arguments = String(data: argsData, encoding: .utf8) ?? "{}"
-            } else {
-                arguments = "{}"
+        for item in response.output {
+            switch item {
+            case .text(let text):
+                contentText = (contentText ?? "") + text
+            case .toolCall(let tc):
+                if toolCalls == nil { toolCalls = [] }
+                toolCalls?.append(tc.toLegacyToolCall())
+            case .jsonOutput(let json):
+                contentText = (contentText ?? "") + json
             }
-        } else {
-            arguments = "{}"
         }
 
-        return [
-            ToolCall(
-                id: "call_\(UUID().uuidString.prefix(8))",
-                function: FunctionCall(name: name, arguments: arguments)
-            ),
-        ]
+        let finishReason = response.finishReason
+        let message: ChatMessage
+        if let toolCalls = toolCalls, !toolCalls.isEmpty {
+            message = ChatMessage(role: .assistant, content: contentText, toolCalls: toolCalls)
+        } else {
+            message = ChatMessage(role: .assistant, content: contentText)
+        }
+
+        let usage: ChatCompletion.Usage?
+        if let ru = response.usage {
+            usage = ChatCompletion.Usage(
+                promptTokens: ru.promptTokens,
+                completionTokens: ru.completionTokens,
+                totalTokens: ru.totalTokens
+            )
+        } else {
+            usage = nil
+        }
+
+        return ChatCompletion(
+            id: completionId,
+            object: "chat.completion",
+            created: Int(Date().timeIntervalSince1970),
+            model: model,
+            choices: [
+                ChatCompletion.Choice(
+                    index: 0,
+                    message: message,
+                    finishReason: finishReason
+                ),
+            ],
+            usage: usage
+        )
     }
 
     // MARK: - Helpers
-
-    private func estimateTokens(_ text: String) -> Int {
-        text.split(separator: " ").count
-    }
 
     private static func makeChunk(
         id: String, created: Int, model: String,

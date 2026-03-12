@@ -1,5 +1,12 @@
 import Foundation
 
+/// ADVANCED — MAY: Hybrid local/cloud inference router.
+///
+/// This is an optional advanced feature. Most applications register a single
+/// ``ModelRuntime`` and do not need routing. Use ``RouterModelRuntime`` when
+/// your app supports both on-device and cloud inference and you want automatic
+/// or policy-driven fallback between them.
+///
 /// Routes inference to local or cloud runtimes based on a ``RoutingPolicy``.
 ///
 /// Resolution order:

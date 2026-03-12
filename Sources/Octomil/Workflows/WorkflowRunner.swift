@@ -1,5 +1,11 @@
 import Foundation
 
+/// ADVANCED — MAY: Workflow execution engine.
+///
+/// This is an optional advanced feature. Most applications do not need
+/// multi-step workflow orchestration. Use this when you have defined a
+/// ``Workflow`` with chained inference, tool, and transform steps.
+///
 /// Executes a ``Workflow`` by running each step sequentially, threading
 /// the text output of each step into the next.
 public final class WorkflowRunner: @unchecked Sendable {

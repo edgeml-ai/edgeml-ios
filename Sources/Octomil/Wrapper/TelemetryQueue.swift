@@ -490,7 +490,7 @@ public final class TelemetryQueue: @unchecked Sendable {
 
     // MARK: - Internal / Private
 
-    /// Sends all buffered events to the server using v2 OTLP envelope.
+    /// Sends all buffered events to the server using OTLP/JSON format.
     internal func flush() async {
         let batch = drainBuffer()
 
@@ -501,8 +501,7 @@ public final class TelemetryQueue: @unchecked Sendable {
             return
         }
 
-        let resource = buildResource()
-        let envelope = TelemetryEnvelope(resource: resource, events: batch)
+        let otlpPayload = buildOTLPPayload(batch)
 
         let url = serverURL.appendingPathComponent("api/v2/telemetry/events")
         var request = URLRequest(url: url)
@@ -515,7 +514,7 @@ public final class TelemetryQueue: @unchecked Sendable {
 
         do {
             let encoder = JSONEncoder()
-            request.httpBody = try encoder.encode(envelope)
+            request.httpBody = try encoder.encode(otlpPayload)
 
             let (_, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse,
@@ -531,13 +530,32 @@ public final class TelemetryQueue: @unchecked Sendable {
         }
     }
 
-    private func buildResource() -> TelemetryResource {
+    /// Builds an OTLP ExportLogsServiceRequest from a batch of internal events.
+    private func buildOTLPPayload(_ events: [TelemetryEvent]) -> ExportLogsServiceRequest {
+        let resource = buildOtlpResource()
+        let logRecords = events.map { $0.toLogRecord() }
+        return ExportLogsServiceRequest(
+            resourceLogs: [
+                ResourceLogs(
+                    resource: resource,
+                    scopeLogs: [
+                        ScopeLogs(
+                            scope: InstrumentationScope(),
+                            logRecords: logRecords
+                        ),
+                    ]
+                ),
+            ]
+        )
+    }
+
+    private func buildOtlpResource() -> OtlpResource {
         lock.lock()
         let devId = deviceId ?? "unknown"
         let org = orgId ?? "unknown"
         lock.unlock()
 
-        return TelemetryResource(
+        return OtlpResource.fromSDK(
             deviceId: devId,
             orgId: org
         )

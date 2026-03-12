@@ -1,5 +1,10 @@
 import Foundation
 
+/// ADVANCED — MAY: Inference routing policy.
+///
+/// This is an optional advanced feature for hybrid local/cloud deployments.
+/// Most applications use a single runtime and do not need routing policies.
+///
 /// Policy governing whether inference runs locally, in the cloud, or automatically.
 public enum InferenceRoutingPolicy: Sendable {
     case auto(preferLocal: Bool = true, maxLatencyMs: Int? = nil, fallback: String = "cloud")
