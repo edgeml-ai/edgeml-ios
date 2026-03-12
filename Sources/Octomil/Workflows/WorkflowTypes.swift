@@ -1,5 +1,11 @@
 import Foundation
 
+/// ADVANCED — MAY: Multi-step workflow orchestration.
+///
+/// Workflows are an optional advanced feature. Most applications only need
+/// the core Response API (`OctomilResponses`). Use workflows when you need
+/// to chain multiple inference steps, tool rounds, or custom transforms.
+///
 /// A named sequence of inference and transformation steps.
 public struct Workflow: @unchecked Sendable {
     public let name: String
