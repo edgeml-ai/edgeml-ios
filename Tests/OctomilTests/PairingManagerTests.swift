@@ -97,7 +97,7 @@ final class PairingManagerTests: XCTestCase {
             "download_url": "https://cdn.example.com/model.mlmodel",
             "download_format": "coreml",
             "download_size_bytes": 50_000_000,
-            "device_tier": "REDACTED_DEVICE",
+            "device_class": "REDACTED_DEVICE",
             "quantization": "q4",
             "executor": "coreml",
         ]
@@ -113,7 +113,7 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertEqual(session.downloadURL, "https://cdn.example.com/model.mlmodel")
         XCTAssertEqual(session.downloadFormat, "coreml")
         XCTAssertEqual(session.downloadSizeBytes, 50_000_000)
-        XCTAssertEqual(session.deviceTier, "REDACTED_DEVICE")
+        XCTAssertEqual(session.deviceClass, "REDACTED_DEVICE")
         XCTAssertEqual(session.quantization, "q4")
         XCTAssertEqual(session.executor, "coreml")
     }
@@ -136,7 +136,7 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertNil(session.downloadFormat)
         XCTAssertNil(session.downloadSizeBytes)
         XCTAssertNil(session.modelVersion)
-        XCTAssertNil(session.deviceTier)
+        XCTAssertNil(session.deviceClass)
         XCTAssertNil(session.quantization)
         XCTAssertNil(session.executor)
     }
@@ -827,7 +827,7 @@ final class PairingManagerTests: XCTestCase {
             "download_url": "https://x.com/m",
             "download_format": "coreml",
             "download_size_bytes": 1000,
-            "device_tier": "REDACTED_DEVICE",
+            "device_class": "REDACTED_DEVICE",
             "quantization": "q4",
             "executor": "coreml",
         ]
@@ -837,7 +837,7 @@ final class PairingManagerTests: XCTestCase {
 
         XCTAssertEqual(session.modelVersion, "v1")
         XCTAssertEqual(session.status, .done)
-        XCTAssertEqual(session.deviceTier, "REDACTED_DEVICE")
+        XCTAssertEqual(session.deviceClass, "REDACTED_DEVICE")
     }
 
     // MARK: - PairingManager submitBenchmark Tests
