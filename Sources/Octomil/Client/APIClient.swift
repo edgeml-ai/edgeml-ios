@@ -951,9 +951,7 @@ public actor APIClient {
         case 403:
             return .forbidden(reason: message)
         case 404:
-            // 404 is ambiguous without a code — only model endpoints guarantee model_not_found.
-            // Default to unknown for safety; callers on model paths can refine.
-            return .serverError(statusCode: 404, message: message)
+            return .modelNotFound(modelId: message)
         case 429:
             return .rateLimited(retryAfter: nil)
         case 500...599:
