@@ -24,8 +24,8 @@ public struct PairingSession: Codable, Sendable {
     public let downloadFormat: String?
     /// Size of the model download in bytes.
     public let downloadSizeBytes: Int?
-    /// Server-assigned device tier (e.g. "REDACTED_DEVICE").
-    public let deviceTier: String?
+    /// Server-assigned device class (e.g. "flagship", "high", "mid", "low").
+    public let deviceClass: String?
     /// Quantization method applied to the model (e.g. "q4", "q8", "fp16").
     public let quantization: String?
     /// Inference executor (e.g. "coreml", "mnn").
@@ -40,7 +40,7 @@ public struct PairingSession: Codable, Sendable {
         case downloadURL = "download_url"
         case downloadFormat = "download_format"
         case downloadSizeBytes = "download_size_bytes"
-        case deviceTier = "device_tier"
+        case deviceClass = "device_class"
         case quantization
         case executor
     }
