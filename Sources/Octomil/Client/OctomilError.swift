@@ -383,13 +383,15 @@ public enum OctomilError: LocalizedError, Sendable {
             return .tokenExpired
         case .deviceRevoked:
             return .deviceRevoked
-        // TEMP: These SDK-specific cases have no direct contract counterpart.
-        // trainingFailed != inference_failed, trainingNotSupported != unsupported_modality,
-        // uploadFailed != download_failed, cacheError has no contract code.
-        // Mapped to .unknown until contract revision adds dedicated codes.
-        case .unknown, .decodingError, .cacheError, .keychainError,
-             .trainingFailed, .trainingNotSupported,
-             .weightExtractionFailed, .uploadFailed:
+        case .trainingFailed:
+            return .trainingFailed
+        case .trainingNotSupported:
+            return .trainingNotSupported
+        case .uploadFailed, .weightExtractionFailed:
+            return .weightUploadFailed
+        // SDK-specific cases with no direct contract counterpart.
+        // cacheError is too implementation-specific for a canonical code.
+        case .unknown, .decodingError, .cacheError, .keychainError:
             return .unknown
         }
     }
@@ -487,6 +489,12 @@ public enum OctomilError: LocalizedError, Sendable {
             return .controlSyncFailed(reason: message)
         case .assignmentNotFound:
             return .assignmentNotFound(reason: message)
+        case .trainingFailed:
+            return .trainingFailed(reason: message)
+        case .trainingNotSupported:
+            return .trainingNotSupported
+        case .weightUploadFailed:
+            return .uploadFailed(reason: message)
         case .cancelled:
             return .cancelled
         case .appBackgrounded:

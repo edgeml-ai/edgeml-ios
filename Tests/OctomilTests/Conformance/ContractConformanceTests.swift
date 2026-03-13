@@ -11,7 +11,7 @@ final class ContractConformanceTests: XCTestCase {
 
     // MARK: - ErrorCode Enum Completeness
 
-    /// All 33 canonical error codes from the contract MUST exist
+    /// All 36 canonical error codes from the contract MUST exist
     /// in the generated ErrorCode enum.
     func testAllContractErrorCodesExist() {
         let expected: [String] = [
@@ -43,6 +43,9 @@ final class ContractConformanceTests: XCTestCase {
             "policy_denied",
             "cloud_fallback_disallowed",
             "max_tool_rounds_exceeded",
+            "training_failed",
+            "training_not_supported",
+            "weight_upload_failed",
             "control_sync_failed",
             "assignment_not_found",
             "cancelled",
@@ -67,6 +70,7 @@ final class ContractConformanceTests: XCTestCase {
             .runtimeUnavailable, .acceleratorUnavailable,
             .modelLoadFailed, .inferenceFailed, .streamInterrupted,
             .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .trainingFailed, .trainingNotSupported, .weightUploadFailed,
             .controlSyncFailed, .assignmentNotFound,
             .cancelled, .appBackgrounded, .unknown,
         ]
@@ -76,7 +80,7 @@ final class ContractConformanceTests: XCTestCase {
     // MARK: - ErrorCode JSON round-trip
 
     /// ErrorCode must encode to and decode from its snake_case raw value.
-    /// Tests all 33 canonical codes for full round-trip coverage.
+    /// Tests all 36 canonical codes for full round-trip coverage.
     func testErrorCodeJSONRoundTrip() throws {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
@@ -91,6 +95,7 @@ final class ContractConformanceTests: XCTestCase {
             .runtimeUnavailable, .acceleratorUnavailable,
             .modelLoadFailed, .inferenceFailed, .streamInterrupted,
             .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .trainingFailed, .trainingNotSupported, .weightUploadFailed,
             .controlSyncFailed, .assignmentNotFound,
             .cancelled, .appBackgrounded, .unknown,
         ]
@@ -161,7 +166,7 @@ final class ContractConformanceTests: XCTestCase {
         XCTAssertTrue(error.isRetryable)
     }
 
-    /// All 33 canonical codes must round-trip through OctomilError.from(errorCode:) -> .errorCode.
+    /// All 36 canonical codes must round-trip through OctomilError.from(errorCode:) -> .errorCode.
     /// This does NOT require every code to be natively produced by an iOS code path —
     /// it only verifies that the SDK can parse any code the server sends.
     func testAllCanonicalCodesRoundTripThroughOctomilError() {
@@ -175,6 +180,7 @@ final class ContractConformanceTests: XCTestCase {
             .runtimeUnavailable, .acceleratorUnavailable,
             .modelLoadFailed, .inferenceFailed, .streamInterrupted,
             .policyDenied, .cloudFallbackDisallowed, .maxToolRoundsExceeded,
+            .trainingFailed, .trainingNotSupported, .weightUploadFailed,
             .controlSyncFailed, .assignmentNotFound,
             .cancelled, .appBackgrounded, .unknown,
         ]
@@ -295,6 +301,9 @@ final class ContractConformanceTests: XCTestCase {
             (.policyDenied, false),
             (.cloudFallbackDisallowed, false),
             (.maxToolRoundsExceeded, false),
+            (.trainingFailed, true),
+            (.trainingNotSupported, false),
+            (.weightUploadFailed, true),
             (.controlSyncFailed, true),
             (.assignmentNotFound, false),
             (.cancelled, false),

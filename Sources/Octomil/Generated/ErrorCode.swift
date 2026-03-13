@@ -29,6 +29,9 @@ public enum ErrorCode: String, Codable, Sendable {
     case policyDenied = "policy_denied"
     case cloudFallbackDisallowed = "cloud_fallback_disallowed"
     case maxToolRoundsExceeded = "max_tool_rounds_exceeded"
+    case trainingFailed = "training_failed"
+    case trainingNotSupported = "training_not_supported"
+    case weightUploadFailed = "weight_upload_failed"
     case controlSyncFailed = "control_sync_failed"
     case assignmentNotFound = "assignment_not_found"
     case cancelled = "cancelled"
@@ -45,6 +48,7 @@ public enum ErrorCategory: String, Codable, Sendable {
     case device = "device"
     case runtime = "runtime"
     case policy = "policy"
+    case training = "training"
     case control = "control"
     case lifecycle = "lifecycle"
     case unknown = "unknown"
@@ -115,6 +119,9 @@ extension ErrorCode {
         case .policyDenied: return .policy
         case .cloudFallbackDisallowed: return .policy
         case .maxToolRoundsExceeded: return .policy
+        case .trainingFailed: return .training
+        case .trainingNotSupported: return .training
+        case .weightUploadFailed: return .training
         case .controlSyncFailed: return .control
         case .assignmentNotFound: return .control
         case .cancelled: return .lifecycle
@@ -153,6 +160,9 @@ extension ErrorCode {
         case .policyDenied: return .never
         case .cloudFallbackDisallowed: return .never
         case .maxToolRoundsExceeded: return .never
+        case .trainingFailed: return .conditional
+        case .trainingNotSupported: return .never
+        case .weightUploadFailed: return .backoffSafe
         case .controlSyncFailed: return .backoffSafe
         case .assignmentNotFound: return .never
         case .cancelled: return .never
@@ -191,6 +201,9 @@ extension ErrorCode {
         case .policyDenied: return false
         case .cloudFallbackDisallowed: return false
         case .maxToolRoundsExceeded: return false
+        case .trainingFailed: return false
+        case .trainingNotSupported: return false
+        case .weightUploadFailed: return false
         case .controlSyncFailed: return false
         case .assignmentNotFound: return false
         case .cancelled: return false
@@ -229,6 +242,9 @@ extension ErrorCode {
         case .policyDenied: return .checkPolicy
         case .cloudFallbackDisallowed: return .changePolicyOrFixLocal
         case .maxToolRoundsExceeded: return .increaseLimitOrSimplify
+        case .trainingFailed: return .retry
+        case .trainingNotSupported: return .fixRequest
+        case .weightUploadFailed: return .retry
         case .controlSyncFailed: return .retry
         case .assignmentNotFound: return .checkAssignment
         case .cancelled: return .none
