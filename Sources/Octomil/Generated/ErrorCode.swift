@@ -5,6 +5,8 @@ public enum ErrorCode: String, Codable, Sendable {
     case authenticationFailed = "authentication_failed"
     case forbidden = "forbidden"
     case deviceNotRegistered = "device_not_registered"
+    case tokenExpired = "token_expired"
+    case deviceRevoked = "device_revoked"
     case networkUnavailable = "network_unavailable"
     case requestTimeout = "request_timeout"
     case serverError = "server_error"
@@ -89,6 +91,8 @@ extension ErrorCode {
         case .authenticationFailed: return .auth
         case .forbidden: return .auth
         case .deviceNotRegistered: return .auth
+        case .tokenExpired: return .auth
+        case .deviceRevoked: return .auth
         case .networkUnavailable: return .network
         case .requestTimeout: return .network
         case .serverError: return .network
@@ -125,6 +129,8 @@ extension ErrorCode {
         case .authenticationFailed: return .never
         case .forbidden: return .never
         case .deviceNotRegistered: return .never
+        case .tokenExpired: return .never
+        case .deviceRevoked: return .never
         case .networkUnavailable: return .backoffSafe
         case .requestTimeout: return .conditional
         case .serverError: return .backoffSafe
@@ -161,6 +167,8 @@ extension ErrorCode {
         case .authenticationFailed: return false
         case .forbidden: return false
         case .deviceNotRegistered: return false
+        case .tokenExpired: return false
+        case .deviceRevoked: return false
         case .networkUnavailable: return true
         case .requestTimeout: return true
         case .serverError: return true
@@ -197,6 +205,8 @@ extension ErrorCode {
         case .authenticationFailed: return .reauthenticate
         case .forbidden: return .checkPermissions
         case .deviceNotRegistered: return .registerDevice
+        case .tokenExpired: return .reauthenticate
+        case .deviceRevoked: return .registerDevice
         case .networkUnavailable: return .retryOrFallback
         case .requestTimeout: return .retryOrFallback
         case .serverError: return .retry

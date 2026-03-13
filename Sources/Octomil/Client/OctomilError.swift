@@ -104,6 +104,14 @@ public enum OctomilError: LocalizedError, Sendable {
     /// Bad input data (malformed, wrong type, out of range).
     case invalidInput(reason: String)
 
+    // MARK: - Auth Lifecycle Errors
+
+    /// Access token has expired and must be refreshed or reissued.
+    case tokenExpired
+
+    /// Device registration has been revoked by an administrator.
+    case deviceRevoked
+
     // MARK: - General Errors
 
     /// An unexpected error occurred.
@@ -177,6 +185,10 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Rate limited. Try again later."
         case .invalidInput(let reason):
             return "Invalid input: \(reason)"
+        case .tokenExpired:
+            return "Access token has expired. Refresh or reissue the token."
+        case .deviceRevoked:
+            return "Device registration has been revoked by an administrator."
         case .unknown(let underlying):
             if let error = underlying {
                 return "An unexpected error occurred: \(error.localizedDescription)"
@@ -217,6 +229,10 @@ public enum OctomilError: LocalizedError, Sendable {
             return "Close other apps to free memory, or use a smaller model."
         case .modelLoadFailed:
             return "Try re-downloading the model or use a different format."
+        case .tokenExpired:
+            return "Refresh or reissue the access token."
+        case .deviceRevoked:
+            return "Re-register the device with the server."
         default:
             return nil
         }
@@ -271,6 +287,10 @@ public enum OctomilError: LocalizedError, Sendable {
             return .invalidInput
         case .cancelled:
             return .cancelled
+        case .tokenExpired:
+            return .tokenExpired
+        case .deviceRevoked:
+            return .deviceRevoked
         case .unknown, .decodingError, .cacheError, .keychainError,
              .trainingFailed, .trainingNotSupported,
              .weightExtractionFailed, .uploadFailed:
@@ -371,6 +391,10 @@ public enum OctomilError: LocalizedError, Sendable {
             return .serverError(statusCode: 500, message: message)
         case .assignmentNotFound:
             return .modelNotFound(modelId: message)
+        case .tokenExpired:
+            return .tokenExpired
+        case .deviceRevoked:
+            return .deviceRevoked
         case .appBackgrounded:
             return .cancelled
         }
